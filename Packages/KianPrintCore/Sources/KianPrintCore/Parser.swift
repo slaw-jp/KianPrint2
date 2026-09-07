@@ -31,8 +31,8 @@ public struct KianParser {
                 let pairs = try settingRange.compactMap { index in
                     try settingPair(lines[index], lineNumber: index + 1)
                 }
-                let presetRows = pairs.filter { $0.key == "プリセット" }
-                if let invalid = presetRows.first(where: { $0.value != KianPreset.court.rawValue }) {
+                let presetRows = pairs.filter { $0.key == "preset" }
+                if let invalid = presetRows.first(where: { $0.value.lowercased() != KianPreset.court.rawValue }) {
                     throw KianIssue(line: invalid.lineNumber, message: "未知のプリセット「\(invalid.value)」です。")
                 }
                 if !presetRows.isEmpty {
@@ -77,18 +77,13 @@ public struct KianParser {
                 index += 1
                 continue
             }
-            if ["@改ページ", "[改ページ]", "【改ページ】"].contains(trimmed) {
+            if trimmed == "@page" {
                 blocks.append(.pageBreak)
                 index += 1
                 continue
             }
 
             if let directive = directiveStart(trimmed) {
-                guard directive.name != "改ページ" else {
-                    blocks.append(.pageBreak)
-                    index += 1
-                    continue
-                }
                 let bodyStart = index + 1
                 var end = bodyStart
                 while end < range.upperBound, lines[end].trimmingCharacters(in: .whitespaces) != "}" {
@@ -99,33 +94,7 @@ public struct KianParser {
                 }
                 let bodyRange = bodyStart..<end
                 switch directive.name {
-                case "右揃え", "中央揃え", "右配置":
-                    let trailingInset = try rightAlignmentInset(
-                        directive.argument,
-                        directiveName: directive.name,
-                        line: index + 1
-                    )
-                    let paragraphs = bodyRange.map { bodyIndex -> KianParagraph in
-                        let indent = recognizer.indent(for: lines[bodyIndex])
-                        return KianParagraph(
-                            inlines: parseInline(lines[bodyIndex].trimmingCharacters(in: .whitespaces)),
-                            sourceLine: bodyIndex + 1,
-                            indentLevel: indent.level,
-                            firstLineOutdent: indent.outdent,
-                            alignment: directive.name == "中央揃え" ? .center : (directive.name == "右揃え" ? .trailing : .leading)
-                        )
-                    }
-                    let box = KianBlockBox(
-                        alignment: directive.name == "中央揃え" ? .center : .trailing,
-                        contentAlignment: directive.name == "右配置" ? .leading : (directive.name == "中央揃え" ? .center : .trailing),
-                        width: directive.name == "右配置"
-                            ? .fit(maximumFraction: trailingInset > 0 ? 1 : 0.58)
-                            : .full,
-                        trailingInset: trailingInset,
-                        paragraphs: paragraphs
-                    )
-                    blocks.append(.blockBox(box))
-                case "表":
+                case "table":
                     let options = try parseTableOptions(
                         directive.argument,
                         directiveName: directive.name,
@@ -139,7 +108,7 @@ public struct KianParser {
                         forcedFirstRowAlignment: options.firstRowAlignment
                     )
                     blocks.append(contentsOf: inner)
-                case "タブ":
+                case "tab":
                     let tabIntervals = try parseTabIntervals(directive.argument, line: index + 1)
                     let tabbedLines = try bodyRange.map { bodyIndex in
                         let cells = lines[bodyIndex].split(separator: "\t", omittingEmptySubsequences: false).map {
@@ -150,12 +119,16 @@ public struct KianParser {
                         }
                         return KianTabbedLine(cells: cells, sourceLine: bodyIndex + 1)
                     }
-                    blocks.append(.tabbed(KianTabbedBlock(tabIntervalsInCharacters: tabIntervals, lines: tabbedLines)))
+                    blocks.append(.tabbed(KianTabbedBlock(tabIntervalsInFontUnits: tabIntervals, lines: tabbedLines)))
                 default:
                     throw KianIssue(line: index + 1, message: "未知のDirective @\(directive.name) です。")
                 }
                 index = end + 1
                 continue
+            }
+
+            if trimmed.hasPrefix("@") {
+                throw KianIssue(line: index + 1, message: "未知のDirective \(trimmed) です。")
             }
 
             if trimmed.hasPrefix("#") {
@@ -230,28 +203,32 @@ public struct KianParser {
         let (key, value, lineNumber) = pair
 
         switch key {
-        case "プリセット":
-            guard value == KianPreset.court.rawValue else {
+        case "preset":
+            guard value.lowercased() == KianPreset.court.rawValue else {
                 throw KianIssue(line: lineNumber, message: "未知のプリセット「\(value)」です。")
             }
             settings = KianSettings()
-        case "用紙":
+        case "paper":
             guard value.uppercased() == "A4" else {
                 throw KianIssue(line: lineNumber, message: "β版で使用できる用紙はA4だけです。")
             }
-        case "フォント": settings.fontName = value
-        case "文字サイズ": settings.fontSize = try points(value, line: lineNumber)
-        case "上余白": settings.topMargin = try millimeters(value, line: lineNumber)
-        case "下余白": settings.bottomMargin = try millimeters(value, line: lineNumber)
-        case "左余白": settings.leftMargin = try millimeters(value, line: lineNumber)
-        case "右余白": settings.rightMargin = try millimeters(value, line: lineNumber)
-        case "行間": settings.lineSpacing = try points(value, line: lineNumber)
-        case "字間": settings.characterSpacing = try points(value, line: lineNumber, unitOptional: true)
-        case "ページ番号":
-            if ["あり", "有り", "on", "yes", "true"].contains(value.lowercased()) { settings.showsPageNumbers = true }
-            else if ["なし", "無し", "off", "no", "false"].contains(value.lowercased()) { settings.showsPageNumbers = false }
-            else { throw KianIssue(line: lineNumber, message: "ページ番号は「あり」または「なし」で指定してください。") }
-        case "禁則処理": settings.kinsokuMode = value
+        case "font": settings.fontName = value
+        case "font size": settings.fontSize = try points(value, line: lineNumber)
+        case "top": settings.topMargin = try millimeters(value, line: lineNumber)
+        case "bottom": settings.bottomMargin = try millimeters(value, line: lineNumber)
+        case "left": settings.leftMargin = try millimeters(value, line: lineNumber)
+        case "right": settings.rightMargin = try millimeters(value, line: lineNumber)
+        case "spacing": settings.lineSpacing = try points(value, line: lineNumber)
+        case "kern": settings.characterSpacing = try points(value, line: lineNumber, unitOptional: true)
+        case "page number":
+            if value.lowercased() == "on" { settings.showsPageNumbers = true }
+            else if value.lowercased() == "off" { settings.showsPageNumbers = false }
+            else { throw KianIssue(line: lineNumber, message: "page number は on または off で指定してください。") }
+        case "kinsoku":
+            guard value.lowercased() == "court" else {
+                throw KianIssue(line: lineNumber, message: "kinsoku は court で指定してください。")
+            }
+            settings.kinsokuMode = "court"
         default:
             issues.append(KianIssue(line: lineNumber, message: "未知の設定「\(key)」は無視しました。", severity: .warning))
         }
@@ -279,24 +256,6 @@ public struct KianParser {
         return CGFloat(value) * KianSettings.pointsPerMillimeter
     }
 
-    private func rightAlignmentInset(
-        _ argument: String?,
-        directiveName: String,
-        line: Int
-    ) throws -> CGFloat {
-        guard let argument else { return 0 }
-        guard directiveName != "中央揃え" else {
-            throw KianIssue(line: line, message: "@中央揃えには引数を指定できません。")
-        }
-        guard let value = Double(argument.trimmingCharacters(in: .whitespaces)), value >= 0 else {
-            throw KianIssue(
-                line: line,
-                message: "@\(directiveName) の引数は「3」のように、12pt文字何字分を空けるか指定してください。"
-            )
-        }
-        return CGFloat(value) * 12
-    }
-
     private struct TableOptions {
         var columnWidths: [CGFloat]?
         var firstRowAlignment: KianColumnAlignment?
@@ -308,24 +267,25 @@ public struct KianParser {
         line: Int
     ) throws -> TableOptions {
         guard let argument else { return TableOptions() }
+        let components = argument.split(
+            omittingEmptySubsequences: false,
+            whereSeparator: { $0 == ";" || $0 == "；" }
+        )
+        guard (1...2).contains(components.count) else {
+            throw KianIssue(line: line, message: "@\(directiveName) は @table(4,8,3; center) の形式で指定してください。")
+        }
         var result = TableOptions()
-        let components = argument.split(whereSeparator: { $0 == ";" || $0 == "；" })
-        for rawComponent in components {
-            let component = rawComponent.trimmingCharacters(in: .whitespaces)
-            let widthPrefixes = ["列幅=", "列幅＝", "列幅:", "列幅："]
-            if let prefix = widthPrefixes.first(where: { component.hasPrefix($0) }) {
-                result.columnWidths = try parsePositiveNumbers(
-                    String(component.dropFirst(prefix.count)),
-                    line: line,
-                    description: "列幅"
-                )
-            } else if ["先頭行=中央", "先頭行＝中央", "先頭行:中央", "先頭行：中央"].contains(component) {
-                result.firstRowAlignment = .center
-            } else {
-                throw KianIssue(
-                    line: line,
-                    message: "@\(directiveName) の引数は「列幅=4,8,3; 先頭行=中央」の形式で指定してください。"
-                )
+        result.columnWidths = try parsePositiveNumbers(
+            String(components[0]),
+            line: line,
+            description: "column widths"
+        )
+        if components.count == 2 {
+            switch components[1].trimmingCharacters(in: .whitespaces).lowercased() {
+            case "center": result.firstRowAlignment = .center
+            case "right": result.firstRowAlignment = .trailing
+            default:
+                throw KianIssue(line: line, message: "先頭行の配置は center または right で指定してください。")
             }
         }
         return result
@@ -333,7 +293,7 @@ public struct KianParser {
 
     private func parseTabIntervals(_ argument: String?, line: Int) throws -> [CGFloat] {
         guard let argument else {
-            throw KianIssue(line: line, message: "@タブには「@タブ(4,6)」のように前のタブ位置からの間隔を指定してください。")
+            throw KianIssue(line: line, message: "@tab には @tab(4,6) のように前のタブ位置からの間隔を指定してください。")
         }
         return try parsePositiveNumbers(argument, line: line, description: "タブ間隔")
     }
@@ -355,7 +315,6 @@ public struct KianParser {
 
     private func directiveStart(_ line: String) -> (name: String, argument: String?)? {
         guard line.hasPrefix("@") else { return nil }
-        if line == "@改ページ" { return ("改ページ", nil) }
         guard line.hasSuffix("{") else { return nil }
         let head = line.dropFirst().dropLast().trimmingCharacters(in: .whitespaces)
         if let open = head.firstIndex(of: "("), head.hasSuffix(")") {

@@ -45,9 +45,9 @@ public enum KianTypography {
     }
 
     public static func makeFont(name: String, size: CGFloat, bold: Bool, italic: Bool) -> CTFont {
-        let base = CTFontCreateWithName(name as CFString, size, nil)
+        let resolvedName = bold ? "Hiragino Sans W6" : name
+        let base = CTFontCreateWithName(resolvedName as CFString, size, nil)
         var traits: CTFontSymbolicTraits = []
-        if bold { traits.insert(.boldTrait) }
         if italic { traits.insert(.italicTrait) }
         guard !traits.isEmpty else { return base }
         return CTFontCreateCopyWithSymbolicTraits(base, 0, nil, traits, traits) ?? base

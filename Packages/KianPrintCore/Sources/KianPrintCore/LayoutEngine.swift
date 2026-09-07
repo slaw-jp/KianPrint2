@@ -230,8 +230,8 @@ private final class LayoutBuilder {
 
     private func layoutTabbedBlock(_ block: KianTabbedBlock) {
         var cumulativeOffset: CGFloat = 0
-        let tabStops = block.tabIntervalsInCharacters.map { interval -> CGFloat in
-            cumulativeOffset += interval * 12
+        let tabStops = block.tabIntervalsInFontUnits.map { interval -> CGFloat in
+            cumulativeOffset += interval * settings.fontSize
             return cumulativeOffset
         }
         for row in block.lines {

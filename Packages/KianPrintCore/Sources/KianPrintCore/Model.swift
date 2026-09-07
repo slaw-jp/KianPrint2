@@ -30,7 +30,7 @@ public enum KianTextAlignment: String, Sendable {
 }
 
 public enum KianPreset: String, Sendable, Equatable {
-    case court = "裁判所"
+    case court
 }
 
 public struct KianSettings: Sendable, Equatable {
@@ -50,7 +50,7 @@ public struct KianSettings: Sendable, Equatable {
     public var lineSpacing: CGFloat = 13.62
     public var characterSpacing: CGFloat = 0
     public var showsPageNumbers = true
-    public var kinsokuMode = "裁判所"
+    public var kinsokuMode = "court"
     /// `court` means the source had no settings, or explicitly selected the
     /// court preset. `nil` means that a manual front matter block is in use.
     public var preset: KianPreset? = .court
@@ -208,12 +208,12 @@ public struct KianTabbedLine: Sendable, Equatable {
 }
 
 public struct KianTabbedBlock: Sendable, Equatable {
-    /// Distances from the preceding tab stop, measured in 12pt fullwidth-character units.
-    public var tabIntervalsInCharacters: [CGFloat]
+    /// Distances from the preceding tab stop, measured in document-font-size units.
+    public var tabIntervalsInFontUnits: [CGFloat]
     public var lines: [KianTabbedLine]
 
-    public init(tabIntervalsInCharacters: [CGFloat], lines: [KianTabbedLine]) {
-        self.tabIntervalsInCharacters = tabIntervalsInCharacters
+    public init(tabIntervalsInFontUnits: [CGFloat], lines: [KianTabbedLine]) {
+        self.tabIntervalsInFontUnits = tabIntervalsInFontUnits
         self.lines = lines
     }
 }

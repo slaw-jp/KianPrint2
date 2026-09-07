@@ -2,19 +2,18 @@ import XCTest
 @testable import KianPrintCore
 
 final class ParserTests: XCTestCase {
-    func testJapaneseFrontMatterAndDirectives() throws {
+    func testEnglishFrontMatterAndDirectives() throws {
         let source = """
         ---
-        文字サイズ: 13pt
-        上余白: 30mm
-        ページ番号: なし
+        font size: 13pt
+        top: 30mm
+        page number: off
         ---
         # 訴状
-        @右配置 {
-        架空郵便番号
-        架空県架空市一丁目
+        @tab(12) {
+        \t架空県架空市一丁目
         }
-        @改ページ
+        @page
         本文
         """
         let document = try KianParser().parse(source)
@@ -22,7 +21,7 @@ final class ParserTests: XCTestCase {
         XCTAssertEqual(document.settings.topMargin, 30 * KianSettings.pointsPerMillimeter, accuracy: 0.001)
         XCTAssertFalse(document.settings.showsPageNumbers)
         XCTAssertNil(document.settings.preset)
-        XCTAssertTrue(document.blocks.contains { if case .blockBox = $0 { return true }; return false })
+        XCTAssertTrue(document.blocks.contains { if case .tabbed = $0 { return true }; return false })
         XCTAssertTrue(document.blocks.contains { if case .pageBreak = $0 { return true }; return false })
     }
 
@@ -41,11 +40,11 @@ final class ParserTests: XCTestCase {
     func testCourtPresetOverridesEveryOtherSettingRegardlessOfOrder() throws {
         let source = """
         ---
-        文字サイズ: 99pt
-        上余白: この値も無視される
-        ページ番号: なし
-        プリセット: 裁判所
-        行間: 1pt
+        font size: 99pt
+        top: この値も無視される
+        page number: off
+        preset: court
+        spacing: 1pt
         ---
         架空の本文
         """
@@ -62,29 +61,33 @@ final class ParserTests: XCTestCase {
     func testManualCourtValuesDoNotActivateCourtPreset() throws {
         let source = """
         ---
-        文字サイズ: 12pt
-        上余白: 35mm
-        下余白: 27mm
-        左余白: 30mm
-        右余白: 22mm
-        字間: 0pt
-        行間: 13.62pt
-        ページ番号: あり
-        禁則処理: 裁判所
+        paper: A4
+        font: Hiragino Mincho ProN W3
+        font size: 12pt
+        top: 35mm
+        bottom: 27mm
+        left: 30mm
+        right: 22mm
+        kern: 0pt
+        spacing: 13.62pt
+        page number: on
+        kinsoku: court
         ---
         架空の本文
         """
         let document = try KianParser().parse(source)
         XCTAssertNil(document.settings.preset)
         XCTAssertFalse(document.settings.usesStandardCourtGrid)
+        XCTAssertEqual(document.settings.fontName, "Hiragino Mincho ProN W3")
+        XCTAssertEqual(document.settings.kinsokuMode, "court")
     }
 
     func testCustomCharacterAndLineSpacingLeaveCourtGrid() throws {
         let source = """
         ---
-        文字サイズ: 12pt
-        字間: 0.2pt
-        行間: 6pt
+        font size: 12pt
+        kern: 0.2pt
+        spacing: 6pt
         ---
         架空の本文
         """
@@ -97,7 +100,7 @@ final class ParserTests: XCTestCase {
     }
 
     func testInvalidSettingReportsLineNumber() {
-        XCTAssertThrowsError(try KianParser().parse("---\n上余白: 大きめ\n---\n本文")) { error in
+        XCTAssertThrowsError(try KianParser().parse("---\ntop: 大きめ\n---\n本文")) { error in
             XCTAssertEqual((error as? KianIssue)?.line, 2)
         }
     }
@@ -117,32 +120,9 @@ final class ParserTests: XCTestCase {
         XCTAssertTrue(table.rows[0].cells[4].inlines.contains(where: \.italic))
     }
 
-    func testNumericRightInsetUsesTwelvePointCharacterUnits() throws {
-        let document = try KianParser().parse("""
-        @右配置(3) {
-        原告訴訟代理人弁護士　架　空　太　郎
-        }
-        """)
-        guard case .blockBox(let box) = document.blocks[0] else { return XCTFail() }
-        XCTAssertEqual(box.trailingInset, 36, accuracy: 0.001)
-    }
-
-    func testFormerRightInsetArgumentsAreRejected() {
-        XCTAssertThrowsError(try KianParser().parse("""
-        @右配置(印) {
-        原告訴訟代理人弁護士　架　空　太　郎
-        }
-        """))
-        XCTAssertThrowsError(try KianParser().parse("""
-        @右揃え(30pt) {
-        原告訴訟代理人弁護士　架　空　太　郎
-        }
-        """))
-    }
-
     func testTableDirectivesAcceptVariableColumnWidths() throws {
         let bordered = try KianParser().parse("""
-        @表(列幅=1,2,3; 先頭行=中央) {
+        @table(1,2,3; center) {
         | 左 | 中 | 右 |
         | --- | :---: | ---: |
         | あ | い | う |
@@ -151,11 +131,20 @@ final class ParserTests: XCTestCase {
         guard case .table(let borderedTable) = bordered.blocks[0] else { return XCTFail() }
         XCTAssertEqual(borderedTable.columnWidthsInCharacters ?? [], [1, 2, 3])
         XCTAssertEqual(borderedTable.firstRowAlignment, .center)
+
+        let rightHeader = try KianParser().parse("""
+        @table(1,2,3; right) {
+        | 左 | 中 | 右 |
+        | --- | --- | --- |
+        }
+        """)
+        guard case .table(let rightHeaderTable) = rightHeader.blocks[0] else { return XCTFail() }
+        XCTAssertEqual(rightHeaderTable.firstRowAlignment, .trailing)
     }
 
     func testColumnWidthCountMustMatchTable() {
         XCTAssertThrowsError(try KianParser().parse("""
-        @表(列幅=1,2) {
+        @table(1,2) {
         | 一 | 二 | 三 |
         | --- | --- | --- |
         | あ | い | う |
@@ -163,7 +152,7 @@ final class ParserTests: XCTestCase {
         """))
     }
 
-    func testLegalDocumentSpecificDirectivesWereRemoved() {
+    func testRemovedAndJapaneseDirectivesAreRejected() {
         XCTAssertThrowsError(try KianParser().parse("""
         @証拠説明書(列幅=4,8,3,6,6,10) {
         | 符号番号 | 標目 |  | 作成年月日 | 作成者 | 立証趣旨 |
@@ -181,24 +170,40 @@ final class ParserTests: XCTestCase {
         | --- | --- | --- |
         }
         """))
+        XCTAssertThrowsError(try KianParser().parse("@改ページ"))
+        XCTAssertThrowsError(try KianParser().parse("""
+        @右揃え {
+        本文
+        }
+        """))
+        XCTAssertThrowsError(try KianParser().parse("""
+        @中央揃え {
+        本文
+        }
+        """))
+        XCTAssertThrowsError(try KianParser().parse("""
+        @右配置 {
+        本文
+        }
+        """))
     }
 
     func testTabIntervalsAcceptAnyCountAndPreserveTabFields() throws {
         let document = try KianParser().parse("""
-        @タブ(1,2,3,4,5,6,7,8,9,10,11,12) {
+        @tab(1,2,3,4,5,6,7,8,9,10,11,12) {
         \t原　告\t株式会社架空商事
         \t上記代表者代表取締役\t架　空　花　子
         }
         """)
         guard case .tabbed(let block) = document.blocks[0] else { return XCTFail() }
-        XCTAssertEqual(block.tabIntervalsInCharacters, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
+        XCTAssertEqual(block.tabIntervalsInFontUnits, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
         XCTAssertEqual(block.lines[0].cells.count, 3)
         XCTAssertEqual(block.lines[1].cells.count, 3)
     }
 
     func testTabbedFieldsPreserveIntentionalFullwidthSpaces() throws {
         let document = try KianParser().parse("""
-        @タブ(1,7) {
+        @tab(1,7) {
         　訴訟物の価額\t１００万円
         }
         """)
