@@ -243,7 +243,7 @@ final class TypographyTests: XCTestCase {
         XCTAssertEqual(representativeName.origin.x, company.origin.x, accuracy: 0.001)
     }
 
-    func testTabAdvancesToNextStopAfterCurrentTextPosition() throws {
+    func testEachTabUsesItsCorrespondingStopEvenWhenTheFieldWraps() throws {
         let document = try KianParser().parse("""
         @タブ(1,7) {
         　訴訟物の価額\t１００万円
@@ -254,10 +254,32 @@ final class TypographyTests: XCTestCase {
             guard case .text(let placed) = command else { return nil }
             return placed
         }
-        let label = try XCTUnwrap(texts.first { $0.text.string == "　訴訟物の価額" })
         let value = try XCTUnwrap(texts.first { $0.text.string == "１００万円" })
-        XCTAssertEqual(label.origin.x, document.settings.leftMargin, accuracy: 0.001)
-        XCTAssertEqual(value.origin.x, document.settings.leftMargin + 8 * 12, accuracy: 0.001)
+        let labelLines = texts.filter { $0.text.string != "１００万円" && $0.text.string != "" }
+        XCTAssertEqual(labelLines.map { $0.text.string }.joined(), "　訴訟物の価額")
+        XCTAssertTrue(labelLines.allSatisfy { abs($0.origin.x - document.settings.leftMargin) < 0.001 })
+        XCTAssertEqual(value.origin.x, document.settings.leftMargin + 12, accuracy: 0.001)
+    }
+
+    func testTabCellDoesNotLeaveOneCharacterAloneOnLastLine() throws {
+        let document = try KianParser().parse("""
+        @タブ(10,11) {
+        \t上記代表者代表取締役社長\t架　空　花　子
+        }
+        """)
+        let layout = KianLayoutEngine().layout(document)
+        let texts = layout.pages[0].commands.compactMap { command -> KianPlacedText? in
+            guard case .text(let placed) = command else { return nil }
+            return placed
+        }
+        let firstLine = try XCTUnwrap(texts.first { $0.text.string == "上記代表者代表取締役" })
+        let secondLine = try XCTUnwrap(texts.first { $0.text.string == "社長" })
+        let name = try XCTUnwrap(texts.first { $0.text.string == "架　空　花　子" })
+        let expectedRoleX = document.settings.leftMargin + 10 * 12
+        XCTAssertEqual(firstLine.origin.x, expectedRoleX, accuracy: 0.001)
+        XCTAssertEqual(secondLine.origin.x, expectedRoleX, accuracy: 0.001)
+        XCTAssertEqual(name.origin.x, document.settings.leftMargin + 21 * 12, accuracy: 0.001)
+        XCTAssertEqual(secondLine.origin.y - firstLine.origin.y, document.settings.lineAdvance, accuracy: 0.001)
     }
 
     func testTabIntervalsCanDefineMoreThanTwoStops() throws {

@@ -235,33 +235,17 @@ private final class LayoutBuilder {
             return cumulativeOffset
         }
         for row in block.lines {
-            var cellOffsets: [CGFloat] = [0]
-            var nextStopIndex = 0
-            for cellIndex in 0..<max(0, row.cells.count - 1) {
-                let attributed = KianTypography.attributedString(from: row.cells[cellIndex], settings: settings)
-                let textEnd = cellOffsets[cellIndex] + KianTypography.width(of: attributed)
-                while nextStopIndex < tabStops.count, tabStops[nextStopIndex] <= textEnd + 0.001 {
-                    nextStopIndex += 1
-                }
-                if nextStopIndex < tabStops.count {
-                    cellOffsets.append(tabStops[nextStopIndex])
-                    nextStopIndex += 1
-                } else {
-                    cellOffsets.append(settings.contentWidth)
-                }
-            }
-
             let measuredCells = row.cells.enumerated().map { index, inlines -> [KianMeasuredLine] in
-                let xOffset = cellOffsets[index]
-                let nextOffset = index == row.cells.count - 1 ? settings.contentWidth : cellOffsets[index + 1]
+                let xOffset = index == 0 ? 0 : tabStops[index - 1]
+                let nextOffset = index == row.cells.count - 1 ? settings.contentWidth : tabStops[index]
                 let width = max(1, nextOffset - xOffset)
                 let attributed = KianTypography.attributedString(from: inlines, settings: settings)
-                return breaker.breakLines(attributed, width: width)
+                return breakTabbedCell(attributed, width: width)
             }
             let rowHeight = CGFloat(max(1, measuredCells.map(\.count).max() ?? 1)) * baseAdvance
             ensureSpace(rowHeight)
             for (index, lines) in measuredCells.enumerated() {
-                let xOffset = cellOffsets[index]
+                let xOffset = index == 0 ? 0 : tabStops[index - 1]
                 for (lineIndex, line) in lines.enumerated() {
                     append(
                         line,
@@ -272,6 +256,39 @@ private final class LayoutBuilder {
             }
             cursorY += rowHeight
         }
+    }
+
+    private func breakTabbedCell(_ attributed: NSAttributedString, width: CGFloat) -> [KianMeasuredLine] {
+        let lines = breaker.breakLines(attributed, width: width)
+        guard !attributed.string.contains("\n"),
+              lines.count >= 2,
+              lines[lines.count - 1].attributedText.string.count == 1 else {
+            return lines
+        }
+
+        let previousIndex = lines.count - 2
+        let previous = lines[previousIndex].attributedText
+        let previousString = previous.string as NSString
+        guard previousString.length >= 2 else { return lines }
+        let movedRange = previousString.rangeOfComposedCharacterSequence(at: previousString.length - 1)
+        guard movedRange.location > 0 else { return lines }
+
+        let shortened = previous.attributedSubstring(
+            from: NSRange(location: 0, length: movedRange.location)
+        )
+        let combined = NSMutableAttributedString(
+            attributedString: previous.attributedSubstring(from: movedRange)
+        )
+        combined.append(lines[lines.count - 1].attributedText)
+
+        let shortenedLines = breaker.breakLines(shortened, width: width)
+        let combinedLines = breaker.breakLines(combined, width: width)
+        guard shortenedLines.count == 1, combinedLines.count == 1 else { return lines }
+
+        var adjusted = lines
+        adjusted[previousIndex] = shortenedLines[0]
+        adjusted[previousIndex + 1] = combinedLines[0]
+        return adjusted
     }
 
     private func alignedX(base: CGFloat, available: CGFloat, width: CGFloat, alignment: KianTextAlignment) -> CGFloat {
