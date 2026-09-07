@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- 見出しの行送りを通常行と同じにし、見出しを含むA4ページに26行収まるよう修正
+
 ## 0.1.0-beta.1 — 2026-09-07
 
 - Kian Markdownの日本語front matter、見出し、強調、引用、Directiveを実装

@@ -85,8 +85,11 @@ private final class LayoutBuilder {
     private func layoutHeading(_ heading: KianHeading) {
         let sizes: [Int: CGFloat] = [1: 18, 2: 16, 3: 14, 4: 12]
         let size = sizes[heading.level] ?? settings.fontSize
-        let advance = size + settings.lineSpacing
-        if contentBottom - cursorY < advance * 2 { newPage(force: false) }
+        // A heading uses a larger glyph size, but still occupies one normal
+        // document line.  Its effective leading is therefore reduced so that
+        // headings do not lower the page capacity from 26 lines to 25.
+        let advance = baseAdvance
+        if contentBottom - cursorY < advance + baseAdvance { newPage(force: false) }
         let attributed = KianTypography.attributedString(
             from: heading.inlines, settings: settings, fontSize: size, forceBold: false
         )

@@ -40,4 +40,18 @@ final class TypographyTests: XCTestCase {
         XCTAssertEqual(first.pages.count, 2)
         XCTAssertEqual(first.pages.map(\.commands.count), second.pages.map(\.commands.count))
     }
+
+    func testHeadingOccupiesOneNormalLineAndPageFits26Lines() throws {
+        let body = (1...25).map { "本文\($0)" }.joined(separator: "\n")
+        let document = try KianParser().parse("# 見出し\n\(body)")
+        let layout = KianLayoutEngine().layout(document)
+
+        XCTAssertEqual(layout.pages.count, 1)
+        let textOrigins = layout.pages[0].commands.compactMap { command -> CGPoint? in
+            guard case .text(let text) = command else { return nil }
+            return text.origin
+        }
+        XCTAssertEqual(textOrigins.count, 26)
+        XCTAssertEqual(textOrigins[1].y - textOrigins[0].y, document.settings.fontSize + document.settings.lineSpacing, accuracy: 0.001)
+    }
 }
