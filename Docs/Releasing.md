@@ -6,7 +6,7 @@ Developmentワークスペース内の既存macOSアプリと同じ原則を使�
 2. `swift test` とReleaseビルドを実行する。
 3. `Scripts/check-public.sh` でtracked対象を検査する。
 4. 変更をコミットし、working treeがcleanであることを確認する。
-5. annotated tag（β版では `v0.1.0-beta.1`）を作る。
+5. annotated tag（β版では `vX.Y.Z-beta.N`）を作る。
 6. Public GitHub repositoryへbranchとtagをpushする。
 
 Releaseビルド:

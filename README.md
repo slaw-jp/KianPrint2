@@ -2,7 +2,7 @@
 
 KianPrint2は、プレーンテキストを日本の裁判・法律実務向けA4文書として組版するmacOSアプリです。原稿は `mi.app` などのテキストエディタで編集し、KianPrint2がライブプレビューとPDF出力を担当します。
 
-β版は `0.1.0-beta.1` です。アプリの `CFBundleShortVersionString` は `0.1.0`、リリースタグは `v0.1.0-beta.1` です。
+β版は `0.2.0-beta.1` です。アプリの `CFBundleShortVersionString` は `0.2.0`、リリースタグは `v0.2.0-beta.1` です。
 
 ## 主な機能
 
