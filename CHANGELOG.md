@@ -19,6 +19,7 @@
 - front matterの複合語を `font-size`、`page-number` のハイフン形式へ統一
 - `@table` の列幅単位を `@tab` と同じ本文文字サイズ連動へ変更
 - 先代KianPrintの槌アイコンをLiquid Glass表現へ更新し、KianPrint2のAppIconに設定
+- AppIconを全面不透明の正方形原稿へ変更し、macOSによる白い台座付きの二重縮小を防止
 - 罫線表のセル内文字を左右の罫線から3pt離して配置
 - `@事件情報` を廃止
 - 証拠意見書・証拠調べ請求書の未確定な専用表とサンプルを削除
