@@ -167,10 +167,8 @@ private final class LayoutBuilder {
 
     private func layoutTable(_ table: KianTable) {
         switch table.kind {
-        case .evidenceRequest: layoutRecordTable(table, bordered: true)
-        case .parties: layoutParties(table)
-        case .attachments: layoutAttachments(table)
-        case .generic, .evidenceList, .evidenceOpinion: layoutGridTable(table)
+        case .borderless: layoutBorderlessTable(table)
+        case .generic, .evidenceList: layoutGridTable(table)
         }
     }
 
@@ -178,24 +176,21 @@ private final class LayoutBuilder {
         guard !table.headers.isEmpty else { return }
         let widths = columnWidths(for: table)
         let boldHeader = table.kind == .generic
+        let headerAlignments = table.kind == .evidenceList
+            ? Array(repeating: KianColumnAlignment.center, count: table.headers.count)
+            : table.alignments
         let headerHeight = tableRowHeight(cells: table.headers, widths: widths, bold: boldHeader)
         let firstRowHeight = table.rows.first.map { tableRowHeight(cells: $0.cells, widths: widths, bold: false) } ?? 0
         ensureSpace(headerHeight + firstRowHeight)
-        drawGridRow(cells: table.headers, widths: widths, height: headerHeight, alignments: table.alignments, bold: boldHeader, topWeight: .thin)
+        drawGridRow(cells: table.headers, widths: widths, height: headerHeight, alignments: headerAlignments, bold: boldHeader, topWeight: .thin)
 
-        var priorGroup = ""
         for row in table.rows {
             let height = tableRowHeight(cells: row.cells, widths: widths, bold: false)
             if contentBottom - cursorY < height {
                 newPage(force: false)
-                drawGridRow(cells: table.headers, widths: widths, height: headerHeight, alignments: table.alignments, bold: boldHeader, topWeight: .thin)
+                drawGridRow(cells: table.headers, widths: widths, height: headerHeight, alignments: headerAlignments, bold: boldHeader, topWeight: .thin)
             }
-            var topWeight: KianStrokeWeight = .thin
-            if table.kind == .evidenceOpinion, let group = row.cells.first?.plainText, !group.isEmpty {
-                if !priorGroup.isEmpty, group != priorGroup { topWeight = .thick }
-                priorGroup = group
-            }
-            drawGridRow(cells: row.cells, widths: widths, height: height, alignments: table.alignments, bold: false, topWeight: topWeight)
+            drawGridRow(cells: row.cells, widths: widths, height: height, alignments: table.alignments, bold: false, topWeight: .thin)
         }
     }
 
@@ -245,14 +240,19 @@ private final class LayoutBuilder {
 
     private func columnWidths(for table: KianTable) -> [CGFloat] {
         let count = table.headers.count
+        guard count > 0 else { return [] }
+        if let weights = table.columnWidthWeights {
+            let total = weights.reduce(0, +)
+            if total > 0, weights.count == count {
+                return weights.map { $0 / total * settings.contentWidth }
+            }
+        }
         let preset: [CGFloat]?
         switch table.kind {
         case .evidenceList:
             // 符号番号／標目／原本・写し／作成年月日／作成者／立証趣旨
             // follows the proportions of the author's filed evidence lists.
             preset = count == 6 ? [0.10, 0.29, 0.05, 0.15, 0.15, 0.26] : nil
-        case .evidenceOpinion:
-            preset = count == 4 ? [0.12, 0.46, 0.15, 0.27] : nil
         default: preset = nil
         }
         if let preset { return preset.map { $0 * settings.contentWidth } }
@@ -270,125 +270,51 @@ private final class LayoutBuilder {
         return preferred.map { $0 / total * settings.contentWidth }
     }
 
-    private func layoutAttachments(_ table: KianTable) {
-        let widths = [settings.fontSize * 3, settings.contentWidth - settings.fontSize * 10, settings.fontSize * 7]
-        for row in table.rows {
-            let height = tableRowHeight(cells: row.cells, widths: widths, bold: false) - 8
+    private func layoutBorderlessTable(_ table: KianTable) {
+        guard !table.headers.isEmpty else { return }
+        let gap = settings.fontSize
+        let usableWidth = max(1, settings.contentWidth - gap * CGFloat(max(0, table.headers.count - 1)))
+        let widths: [CGFloat]
+        if let weights = table.columnWidthWeights,
+           weights.count == table.headers.count,
+           weights.reduce(0, +) > 0 {
+            let total = weights.reduce(0, +)
+            widths = weights.map { $0 / total * usableWidth }
+        } else {
+            widths = Array(repeating: usableWidth / CGFloat(table.headers.count), count: table.headers.count)
+        }
+
+        for cells in [table.headers] + table.rows.map(\.cells) {
+            let height = borderlessRowHeight(cells: cells, widths: widths)
             ensureSpace(height)
             var x = settings.leftMargin
-            for index in 0..<min(3, row.cells.count) {
-                let attributed = KianTypography.attributedString(from: row.cells[index].inlines, settings: settings)
+            for index in widths.indices {
+                let cell = index < cells.count ? cells[index] : KianTableCell(inlines: [])
+                let attributed = KianTypography.attributedString(from: cell.inlines, settings: settings)
                 let lines = breaker.breakLines(attributed, width: widths[index])
+                let alignment = index < table.alignments.count ? table.alignments[index] : .leading
                 for (offset, line) in lines.enumerated() {
-                    let alignment: KianTextAlignment = index == 1 ? .leading : .trailing
-                    append(line, x: alignedX(base: x, available: widths[index], width: line.width, alignment: alignment), y: cursorY + CGFloat(offset) * baseAdvance)
+                    let lineX: CGFloat
+                    switch alignment {
+                    case .leading: lineX = x
+                    case .center: lineX = x + (widths[index] - line.width) / 2
+                    case .trailing: lineX = x + widths[index] - line.width
+                    }
+                    append(line, x: lineX, y: cursorY + CGFloat(offset) * baseAdvance)
                 }
-                x += widths[index]
+                x += widths[index] + gap
             }
-            cursorY += max(baseAdvance, height)
+            cursorY += height
         }
     }
 
-    private func layoutParties(_ table: KianTable) {
-        let addressIndex = table.headers.firstIndex { $0.plainText == "住所" } ?? 1
-        let nameIndex = table.headers.firstIndex { $0.plainText == "氏名・名称" } ?? 2
-        let noteIndex = table.headers.firstIndex { $0.plainText == "補足" }
-        let roleX = settings.leftMargin + settings.fontSize * 4
-        let nameX = roleX + settings.fontSize * 10
-        let nameWidth = max(settings.fontSize, settings.paperWidth - settings.rightMargin - nameX)
-
-        for row in table.rows {
-            let role = row.cells.first?.inlines ?? []
-            let address = addressIndex < row.cells.count ? row.cells[addressIndex].inlines : []
-            let name = nameIndex < row.cells.count ? row.cells[nameIndex].inlines : []
-            let note = noteIndex.flatMap { $0 < row.cells.count ? row.cells[$0].inlines : nil } ?? []
-
-            let addressLines = breaker.breakLines(
-                KianTypography.attributedString(from: address, settings: settings),
-                width: settings.contentWidth
-            )
-            let nameLines = breaker.breakLines(
-                KianTypography.attributedString(from: name, settings: settings),
-                width: nameWidth
-            )
-            let noteLines = note.map(\.text).joined().isEmpty ? [] : breaker.breakLines(
-                KianTypography.attributedString(from: note, settings: settings),
-                width: settings.paperWidth - settings.rightMargin - roleX
-            )
-            let requiredLines = addressLines.count + max(1, nameLines.count) + noteLines.count
-            ensureSpace(CGFloat(requiredLines) * baseAdvance)
-
-            for line in addressLines {
-                append(line, x: settings.leftMargin, y: cursorY)
-                cursorY += baseAdvance
-            }
-            let roleLine = breaker.breakLines(
-                KianTypography.attributedString(from: role, settings: settings),
-                width: settings.fontSize * 10
-            ).first
-            if let roleLine { append(roleLine, x: roleX, y: cursorY) }
-            for (offset, line) in nameLines.enumerated() {
-                append(line, x: nameX, y: cursorY + CGFloat(offset) * baseAdvance)
-            }
-            cursorY += CGFloat(max(1, nameLines.count)) * baseAdvance
-            for line in noteLines {
-                append(line, x: roleX, y: cursorY)
-                cursorY += baseAdvance
-            }
-            addVerticalSpace(baseAdvance * 0.5)
+    private func borderlessRowHeight(cells: [KianTableCell], widths: [CGFloat]) -> CGFloat {
+        let lineCounts = widths.indices.map { index -> Int in
+            let cell = index < cells.count ? cells[index] : KianTableCell(inlines: [])
+            let attributed = KianTypography.attributedString(from: cell.inlines, settings: settings)
+            return breaker.breakLines(attributed, width: widths[index]).count
         }
-    }
-
-    private func layoutRecordTable(_ table: KianTable, bordered: Bool) {
-        guard !table.headers.isEmpty else { return }
-        let labelWidth = min(settings.contentWidth * 0.27, table.headers.dropFirst().map {
-            KianTypography.width(of: KianTypography.attributedString(from: $0.inlines, settings: settings, forceBold: true)) + 12
-        }.max() ?? settings.contentWidth * 0.22)
-        let valueWidth = settings.contentWidth - labelWidth
-
-        for row in table.rows {
-            var heights: [CGFloat] = []
-            let titleLines = breaker.breakLines(KianTypography.attributedString(from: row.cells.first?.inlines ?? [], settings: settings, forceBold: true), width: settings.contentWidth - 8)
-            heights.append(CGFloat(max(1, titleLines.count)) * baseAdvance + 8)
-            for index in 1..<table.headers.count {
-                let cell = index < row.cells.count ? row.cells[index] : KianTableCell(inlines: [])
-                let lines = breaker.breakLines(KianTypography.attributedString(from: cell.inlines, settings: settings), width: valueWidth - 8)
-                heights.append(CGFloat(max(1, lines.count)) * baseAdvance + 8)
-            }
-            let recordHeight = heights.reduce(0, +)
-            if recordHeight <= settings.contentHeight, contentBottom - cursorY < recordHeight { newPage(force: false) }
-            let recordTop = cursorY
-
-            for (offset, line) in titleLines.enumerated() {
-                append(line, x: settings.leftMargin + 4, y: cursorY + 4 + CGFloat(offset) * baseAdvance)
-            }
-            cursorY += heights[0]
-            if bordered {
-                pages[currentPageIndex].commands.append(.line(from: CGPoint(x: settings.leftMargin, y: cursorY), to: CGPoint(x: settings.leftMargin + settings.contentWidth, y: cursorY), weight: .thin))
-            }
-            for index in 1..<table.headers.count {
-                let rowHeight = heights[index]
-                if contentBottom - cursorY < rowHeight { newPage(force: false) }
-                let label = KianTypography.attributedString(from: table.headers[index].inlines, settings: settings, forceBold: true)
-                let cell = index < row.cells.count ? row.cells[index] : KianTableCell(inlines: [])
-                let values = breaker.breakLines(KianTypography.attributedString(from: cell.inlines, settings: settings), width: valueWidth - 8)
-                append(breaker.breakLines(label, width: labelWidth - 8).first!, x: settings.leftMargin + 4, y: cursorY + 4)
-                for (offset, line) in values.enumerated() {
-                    append(line, x: settings.leftMargin + labelWidth + 4, y: cursorY + 4 + CGFloat(offset) * baseAdvance)
-                }
-                if bordered {
-                    pages[currentPageIndex].commands.append(.line(from: CGPoint(x: settings.leftMargin, y: cursorY + rowHeight), to: CGPoint(x: settings.leftMargin + settings.contentWidth, y: cursorY + rowHeight), weight: .thin))
-                    pages[currentPageIndex].commands.append(.line(from: CGPoint(x: settings.leftMargin + labelWidth, y: cursorY), to: CGPoint(x: settings.leftMargin + labelWidth, y: cursorY + rowHeight), weight: .thin))
-                }
-                cursorY += rowHeight
-            }
-            if bordered, currentPageIndex == pages.count - 1 {
-                pages[currentPageIndex].commands.append(.rectangle(CGRect(x: settings.leftMargin, y: recordTop, width: settings.contentWidth, height: cursorY - recordTop), weight: .thin))
-                pages[currentPageIndex].commands.append(.line(from: CGPoint(x: settings.leftMargin, y: recordTop), to: CGPoint(x: settings.leftMargin + settings.contentWidth, y: recordTop), weight: .thick))
-            } else if !bordered {
-                addVerticalSpace(baseAdvance * 0.5)
-            }
-        }
+        return CGFloat(max(1, lineCounts.max() ?? 1)) * baseAdvance
     }
 
     private func alignedX(base: CGFloat, available: CGFloat, width: CGFloat, alignment: KianTextAlignment) -> CGFloat {

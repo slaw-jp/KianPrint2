@@ -11,7 +11,7 @@ final class DocumentController: ObservableObject {
     @Published private(set) var layout: KianLayout
     @Published private(set) var message: String?
     @Published private(set) var warnings: [String] = []
-    @Published var zoom: CGFloat = 0.9
+    @Published var zoom: CGFloat = 1.0
 
     private let parser = KianParser()
     private let layoutEngine = KianLayoutEngine()

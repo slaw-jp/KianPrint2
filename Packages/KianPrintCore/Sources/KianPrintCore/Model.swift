@@ -173,11 +173,8 @@ public struct KianTableRow: Sendable, Equatable {
 
 public enum KianTableKind: String, Sendable, Equatable {
     case generic
+    case borderless
     case evidenceList
-    case evidenceRequest
-    case evidenceOpinion
-    case attachments
-    case parties
 }
 
 public struct KianTable: Sendable, Equatable {
@@ -185,6 +182,8 @@ public struct KianTable: Sendable, Equatable {
     public var alignments: [KianColumnAlignment]
     public var rows: [KianTableRow]
     public var kind: KianTableKind
+    /// Relative column widths. Values are normalized when laid out.
+    public var columnWidthWeights: [CGFloat]?
     public var sourceLine: Int
 
     public init(
@@ -192,12 +191,14 @@ public struct KianTable: Sendable, Equatable {
         alignments: [KianColumnAlignment],
         rows: [KianTableRow],
         kind: KianTableKind = .generic,
+        columnWidthWeights: [CGFloat]? = nil,
         sourceLine: Int
     ) {
         self.headers = headers
         self.alignments = alignments
         self.rows = rows
         self.kind = kind
+        self.columnWidthWeights = columnWidthWeights
         self.sourceLine = sourceLine
     }
 }

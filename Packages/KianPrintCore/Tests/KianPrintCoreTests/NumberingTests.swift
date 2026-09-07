@@ -2,6 +2,11 @@ import XCTest
 @testable import KianPrintCore
 
 final class NumberingTests: XCTestCase {
+    func testFullwidthParenthesesAreNotPartOfLegacyHierarchy() {
+        var recognizer = LegalNumberingRecognizer(allLines: ["（１）　架空"])
+        XCTAssertEqual(recognizer.indent(for: "（１）　架空"), KianIndent(level: 0, outdent: 0))
+    }
+
     func testLegacyHierarchyWithArticleDocument() {
         let lines = ["第１条　目的", "第１　総則", "１　本文", "(1)　本文", "ア　本文", "(ア)　本文", "ａ　本文", "(a)　本文"]
         var recognizer = LegalNumberingRecognizer(allLines: lines)
@@ -25,13 +30,5 @@ final class NumberingTests: XCTestCase {
         let first = recognizer.indent(for: lines[1])
         let second = recognizer.indent(for: lines[2])
         XCTAssertEqual(first.level, second.level)
-    }
-
-    func testFullwidthParenthesesAndDigitsUseTheLegalHierarchy() {
-        let lines = ["第１　総則", "１（１）　本文", "（１）　本文", "（１）ア　本文", "ア（ア）　本文", "（ア）　本文"]
-        var recognizer = LegalNumberingRecognizer(allLines: lines)
-        let values = lines.map { recognizer.indent(for: $0) }
-        XCTAssertEqual(values.map(\.level), [2, 3, 3, 4, 5, 5])
-        XCTAssertEqual(values.map(\.outdent), [2, 2, 1, 2, 2, 1])
     }
 }

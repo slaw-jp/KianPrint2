@@ -162,7 +162,7 @@ final class TypographyTests: XCTestCase {
 
     func testSealPlacementKeepsThirtyMillimetersClearAtRight() throws {
         let document = try KianParser().parse("""
-        @右揃え(職印) {
+        @右揃え(印) {
         原告訴訟代理人弁護士　架　空　太　郎
         }
         """)
@@ -174,9 +174,9 @@ final class TypographyTests: XCTestCase {
         XCTAssertEqual(signature.origin.x + signature.width, expectedRight, accuracy: 0.001)
     }
 
-    func testEvidenceListUsesFiledDocumentColumnProportions() throws {
+    func testEvidenceListUsesSpecifiedColumnProportions() throws {
         let document = try KianParser().parse("""
-        @証拠説明書 {
+        @証拠説明書(列幅=10,29,5,15,15,26) {
         | 符号番号 | 標目 |  | 作成年月日 | 作成者 | 立証趣旨 |
         | --- | --- | --- | --- | --- | --- |
         | 甲１ | 契約書 | 原本 | 令和８年 | 原告 | 契約の成立 |
@@ -201,23 +201,45 @@ final class TypographyTests: XCTestCase {
         }
     }
 
-    func testPartyListRendersRecordsWithoutTableFieldLabels() throws {
+    func testEvidenceHeaderIsCenteredWhileBodyUsesColumnAlignment() throws {
         let document = try KianParser().parse("""
-        # 当事者目録
-        | 種別 | 住所 | 氏名・名称 | 補足 |
-        | --- | --- | --- | --- |
-        | 原告 | 架空県架空市 | 株式会社架空商事 | 上記代表者代表取締役　架空花子 |
+        @証拠説明書(列幅=1,1) {
+        | 標目 | 作成者 |
+        | --- | --- |
+        | 契約書 | 原告及び被告 |
+        }
         """)
         let layout = KianLayoutEngine().layout(document)
-        let texts = layout.pages[0].commands.compactMap { command -> String? in
+        let texts = layout.pages[0].commands.compactMap { command -> KianPlacedText? in
             guard case .text(let placed) = command else { return nil }
-            return placed.text.string
+            return placed
         }
-        XCTAssertTrue(texts.contains("架空県架空市"))
-        XCTAssertTrue(texts.contains("原告"))
-        XCTAssertTrue(texts.contains("株式会社架空商事"))
-        XCTAssertFalse(texts.contains("住所"))
-        XCTAssertFalse(texts.contains("氏名・名称"))
-        XCTAssertFalse(texts.contains("補足"))
+        let header = try XCTUnwrap(texts.first { $0.text.string == "標目" })
+        let body = try XCTUnwrap(texts.first { $0.text.string == "契約書" })
+        XCTAssertGreaterThan(header.origin.x, document.settings.leftMargin + 4)
+        XCTAssertEqual(body.origin.x, document.settings.leftMargin + 4, accuracy: 0.001)
+    }
+
+    func testBorderlessTableHasNoRulesAndUsesNormalLineAdvance() throws {
+        let document = try KianParser().parse("""
+        @罫線なし表(列幅=3,20,6) {
+        | １ | 訴状副本 | １通 |
+        | ---: | --- | ---: |
+        | ２ | 甲号証写し | 各２通 |
+        }
+        """)
+        let layout = KianLayoutEngine().layout(document)
+        let lineCommands = layout.pages[0].commands.filter { command in
+            if case .line = command { return true }
+            return false
+        }
+        XCTAssertTrue(lineCommands.isEmpty)
+        let numberOrigins = layout.pages[0].commands.compactMap { command -> CGPoint? in
+            guard case .text(let placed) = command,
+                  ["１", "２"].contains(placed.text.string) else { return nil }
+            return placed.origin
+        }
+        XCTAssertEqual(numberOrigins.count, 2)
+        XCTAssertEqual(numberOrigins[1].y - numberOrigins[0].y, document.settings.lineAdvance, accuracy: 0.001)
     }
 }

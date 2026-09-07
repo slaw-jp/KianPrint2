@@ -107,7 +107,7 @@ final class ParserTests: XCTestCase {
         # 証拠説明書
         | 号証 | 標目 | 作成年月日 | 作成者 | 立証趣旨 | 備考 |
         | :---: | --- | :---: | --- | --- | --- |
-        | 甲1 | **契約書** 原本 | R8.1.1 | 架空太郎 | *契約成立* | |
+        | 甲１ | **契約書** 原本 | R8.1.1 | 架空太郎 | *契約成立* | |
         """
         let document = try KianParser().parse(source)
         guard case .table(let table) = document.blocks.first(where: { if case .table = $0 { return true }; return false }) else {
@@ -118,60 +118,14 @@ final class ParserTests: XCTestCase {
         XCTAssertTrue(table.rows[0].cells[4].inlines.contains(where: \.italic))
     }
 
-    func testEvidenceOpinionAndEmptyInheritedCell() throws {
-        let source = """
-        # 証拠意見書
-        | 号証 | 対象部分 | 意見 | 備考 |
-        | --- | --- | :---: | --- |
-        | 甲1 | 全部 | 同意 | |
-        | | 一部 | 不同意 | |
-        """
-        let document = try KianParser().parse(source)
-        guard case .table(let table) = document.blocks[1] else { return XCTFail() }
-        XCTAssertEqual(table.kind, .evidenceOpinion)
-        XCTAssertEqual(table.rows[1].cells[0].plainText, "")
-    }
-
-    func testEvidenceRequestShortNameHeadingAndDirective() throws {
-        let automatic = try KianParser().parse("""
-        # 証拠調請求書
-        | 項目 | 内容 |
-        | --- | --- |
-        | 架空 | 架空 |
-        """)
-        guard case .table(let automaticTable) = automatic.blocks[1] else { return XCTFail() }
-        XCTAssertEqual(automaticTable.kind, .evidenceRequest)
-
-        let explicit = try KianParser().parse("""
-        @証拠調請求書 {
-        | 項目 | 内容 |
-        | --- | --- |
-        | 架空 | 架空 |
-        }
-        """)
-        guard case .table(let explicitTable) = explicit.blocks[0] else { return XCTFail() }
-        XCTAssertEqual(explicitTable.kind, .evidenceRequest)
-    }
-
-    func testExplicitHeadingTakesPriorityOverTableColumnInference() throws {
-        let document = try KianParser().parse("""
-        # 証拠意見書
-        | 号証 | 標目 | 立証趣旨 |
-        | --- | --- | --- |
-        | 甲1 | 架空 | 架空 |
-        """)
-        guard case .table(let table) = document.blocks[1] else { return XCTFail() }
-        XCTAssertEqual(table.kind, .evidenceOpinion)
-    }
-
     func testEvidenceDocumentTitleAppliesAfterFirstPageMetadata() throws {
         let document = try KianParser().parse("""
-        # 証拠意見書
+        # 証拠説明書
         @右揃え {
         令和８年９月７日
         }
         架空地方裁判所民事部　御中
-        @右配置(職印) {
+        @右配置(印) {
         被告訴訟代理人弁護士　見　本　次　郎
         }
         | 項目 | 内容 |
@@ -179,17 +133,69 @@ final class ParserTests: XCTestCase {
         | 架空 | 架空 |
         """)
         guard case .table(let table) = document.blocks.last else { return XCTFail() }
-        XCTAssertEqual(table.kind, .evidenceOpinion)
+        XCTAssertEqual(table.kind, .evidenceList)
     }
 
     func testSealArgumentReservesThirtyMillimeters() throws {
         let document = try KianParser().parse("""
-        @右配置(職印) {
+        @右配置(印) {
         原告訴訟代理人弁護士　架　空　太　郎
         }
         """)
         guard case .blockBox(let box) = document.blocks[0] else { return XCTFail() }
         XCTAssertEqual(box.trailingInset, 30 * KianSettings.pointsPerMillimeter, accuracy: 0.001)
+    }
+
+    func testFormerOccupationSealArgumentIsRejected() {
+        XCTAssertThrowsError(try KianParser().parse("""
+        @右配置(職印) {
+        原告訴訟代理人弁護士　架　空　太　郎
+        }
+        """))
+    }
+
+    func testRightAlignmentAcceptsExactPointInset() throws {
+        let document = try KianParser().parse("""
+        @右揃え(30pt) {
+        原告訴訟代理人弁護士　架　空　太　郎
+        }
+        """)
+        guard case .blockBox(let box) = document.blocks[0] else { return XCTFail() }
+        XCTAssertEqual(box.trailingInset, 30, accuracy: 0.001)
+    }
+
+    func testTableDirectivesAcceptVariableColumnWidths() throws {
+        let bordered = try KianParser().parse("""
+        @表(列幅=1,2,3) {
+        | 左 | 中 | 右 |
+        | --- | :---: | ---: |
+        | あ | い | う |
+        }
+        """)
+        guard case .table(let borderedTable) = bordered.blocks[0] else { return XCTFail() }
+        XCTAssertEqual(borderedTable.kind, .generic)
+        XCTAssertEqual(borderedTable.columnWidthWeights ?? [], [1, 2, 3])
+
+        let borderless = try KianParser().parse("""
+        @罫線なし表(列幅=3,20,6) {
+        | １ | 訴状副本 | １通 |
+        | ---: | --- | ---: |
+        | ２ | 甲号証写し | 各２通 |
+        }
+        """)
+        guard case .table(let borderlessTable) = borderless.blocks[0] else { return XCTFail() }
+        XCTAssertEqual(borderlessTable.kind, .borderless)
+        XCTAssertEqual(borderlessTable.columnWidthWeights ?? [], [3, 20, 6])
+    }
+
+    func testColumnWidthCountMustMatchTable() {
+        XCTAssertThrowsError(try KianParser().parse("""
+        @表(列幅=1,2) {
+        | 一 | 二 | 三 |
+        | --- | --- | --- |
+        | あ | い | う |
+        }
+        """))
     }
 
     func testEvidenceListRecognitionAcceptsFiledDocumentHeaders() throws {
