@@ -26,4 +26,12 @@ final class NumberingTests: XCTestCase {
         let second = recognizer.indent(for: lines[2])
         XCTAssertEqual(first.level, second.level)
     }
+
+    func testFullwidthParenthesesAndDigitsUseTheLegalHierarchy() {
+        let lines = ["第１　総則", "１（１）　本文", "（１）　本文", "（１）ア　本文", "ア（ア）　本文", "（ア）　本文"]
+        var recognizer = LegalNumberingRecognizer(allLines: lines)
+        let values = lines.map { recognizer.indent(for: $0) }
+        XCTAssertEqual(values.map(\.level), [2, 3, 3, 4, 5, 5])
+        XCTAssertEqual(values.map(\.outdent), [2, 2, 1, 2, 2, 1])
+    }
 }

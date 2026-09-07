@@ -87,8 +87,10 @@ private final class LayoutBuilder {
     }
 
     private func layoutHeading(_ heading: KianHeading) {
-        let sizes: [Int: CGFloat] = [1: 18, 2: 16, 3: 14, 4: 12]
-        let size = sizes[heading.level] ?? settings.fontSize
+        // These are the exact ratios used by the original KianPrint:
+        // 18/12, 16/12, 14/12 and 12/12 of the document's base size.
+        let ratios: [Int: CGFloat] = [1: 18 / 12, 2: 16 / 12, 3: 14 / 12, 4: 1]
+        let size = settings.fontSize * (ratios[heading.level] ?? 1)
         // A heading uses a larger glyph size, but still occupies one normal
         // document line.  Its effective leading is therefore reduced so that
         // headings do not lower the page capacity from 26 lines to 25.
@@ -107,20 +109,21 @@ private final class LayoutBuilder {
     }
 
     private func layoutBlockBox(_ box: KianBlockBox) {
+        let availableContentWidth = max(1, settings.contentWidth - box.trailingInset)
         let blockWidth: CGFloat
         switch box.width {
-        case .full: blockWidth = settings.contentWidth
+        case .full: blockWidth = availableContentWidth
         case .fit(let maximumFraction):
             let preferred = box.paragraphs.map {
                 KianTypography.width(of: KianTypography.attributedString(from: $0.inlines, settings: settings))
             }.max() ?? 0
-            blockWidth = min(settings.contentWidth * maximumFraction, max(settings.contentWidth * 0.25, preferred))
+            blockWidth = min(availableContentWidth * maximumFraction, max(availableContentWidth * 0.25, preferred))
         }
         let originX: CGFloat
         switch box.alignment {
         case .leading: originX = settings.leftMargin
-        case .center: originX = settings.leftMargin + (settings.contentWidth - blockWidth) / 2
-        case .trailing: originX = settings.leftMargin + settings.contentWidth - blockWidth
+        case .center: originX = settings.leftMargin + (availableContentWidth - blockWidth) / 2
+        case .trailing: originX = settings.leftMargin + availableContentWidth - blockWidth
         }
         for paragraph in box.paragraphs {
             let attributed = KianTypography.attributedString(from: paragraph.inlines, settings: settings)
@@ -165,7 +168,7 @@ private final class LayoutBuilder {
     private func layoutTable(_ table: KianTable) {
         switch table.kind {
         case .evidenceRequest: layoutRecordTable(table, bordered: true)
-        case .parties: layoutRecordTable(table, bordered: false)
+        case .parties: layoutParties(table)
         case .attachments: layoutAttachments(table)
         case .generic, .evidenceList, .evidenceOpinion: layoutGridTable(table)
         }
@@ -174,16 +177,18 @@ private final class LayoutBuilder {
     private func layoutGridTable(_ table: KianTable) {
         guard !table.headers.isEmpty else { return }
         let widths = columnWidths(for: table)
-        let headerHeight = tableRowHeight(cells: table.headers, widths: widths, bold: true)
-        ensureSpace(headerHeight)
-        drawGridRow(cells: table.headers, widths: widths, height: headerHeight, alignments: table.alignments, bold: true, topWeight: .thin)
+        let boldHeader = table.kind == .generic
+        let headerHeight = tableRowHeight(cells: table.headers, widths: widths, bold: boldHeader)
+        let firstRowHeight = table.rows.first.map { tableRowHeight(cells: $0.cells, widths: widths, bold: false) } ?? 0
+        ensureSpace(headerHeight + firstRowHeight)
+        drawGridRow(cells: table.headers, widths: widths, height: headerHeight, alignments: table.alignments, bold: boldHeader, topWeight: .thin)
 
         var priorGroup = ""
         for row in table.rows {
             let height = tableRowHeight(cells: row.cells, widths: widths, bold: false)
             if contentBottom - cursorY < height {
                 newPage(force: false)
-                drawGridRow(cells: table.headers, widths: widths, height: headerHeight, alignments: table.alignments, bold: true, topWeight: .thin)
+                drawGridRow(cells: table.headers, widths: widths, height: headerHeight, alignments: table.alignments, bold: boldHeader, topWeight: .thin)
             }
             var topWeight: KianStrokeWeight = .thin
             if table.kind == .evidenceOpinion, let group = row.cells.first?.plainText, !group.isEmpty {
@@ -243,7 +248,9 @@ private final class LayoutBuilder {
         let preset: [CGFloat]?
         switch table.kind {
         case .evidenceList:
-            preset = count == 6 ? [0.09, 0.18, 0.14, 0.15, 0.31, 0.13] : nil
+            // 符号番号／標目／原本・写し／作成年月日／作成者／立証趣旨
+            // follows the proportions of the author's filed evidence lists.
+            preset = count == 6 ? [0.10, 0.29, 0.05, 0.15, 0.15, 0.26] : nil
         case .evidenceOpinion:
             preset = count == 4 ? [0.12, 0.46, 0.15, 0.27] : nil
         default: preset = nil
@@ -279,6 +286,56 @@ private final class LayoutBuilder {
                 x += widths[index]
             }
             cursorY += max(baseAdvance, height)
+        }
+    }
+
+    private func layoutParties(_ table: KianTable) {
+        let addressIndex = table.headers.firstIndex { $0.plainText == "住所" } ?? 1
+        let nameIndex = table.headers.firstIndex { $0.plainText == "氏名・名称" } ?? 2
+        let noteIndex = table.headers.firstIndex { $0.plainText == "補足" }
+        let roleX = settings.leftMargin + settings.fontSize * 4
+        let nameX = roleX + settings.fontSize * 10
+        let nameWidth = max(settings.fontSize, settings.paperWidth - settings.rightMargin - nameX)
+
+        for row in table.rows {
+            let role = row.cells.first?.inlines ?? []
+            let address = addressIndex < row.cells.count ? row.cells[addressIndex].inlines : []
+            let name = nameIndex < row.cells.count ? row.cells[nameIndex].inlines : []
+            let note = noteIndex.flatMap { $0 < row.cells.count ? row.cells[$0].inlines : nil } ?? []
+
+            let addressLines = breaker.breakLines(
+                KianTypography.attributedString(from: address, settings: settings),
+                width: settings.contentWidth
+            )
+            let nameLines = breaker.breakLines(
+                KianTypography.attributedString(from: name, settings: settings),
+                width: nameWidth
+            )
+            let noteLines = note.map(\.text).joined().isEmpty ? [] : breaker.breakLines(
+                KianTypography.attributedString(from: note, settings: settings),
+                width: settings.paperWidth - settings.rightMargin - roleX
+            )
+            let requiredLines = addressLines.count + max(1, nameLines.count) + noteLines.count
+            ensureSpace(CGFloat(requiredLines) * baseAdvance)
+
+            for line in addressLines {
+                append(line, x: settings.leftMargin, y: cursorY)
+                cursorY += baseAdvance
+            }
+            let roleLine = breaker.breakLines(
+                KianTypography.attributedString(from: role, settings: settings),
+                width: settings.fontSize * 10
+            ).first
+            if let roleLine { append(roleLine, x: roleX, y: cursorY) }
+            for (offset, line) in nameLines.enumerated() {
+                append(line, x: nameX, y: cursorY + CGFloat(offset) * baseAdvance)
+            }
+            cursorY += CGFloat(max(1, nameLines.count)) * baseAdvance
+            for line in noteLines {
+                append(line, x: roleX, y: cursorY)
+                cursorY += baseAdvance
+            }
+            addVerticalSpace(baseAdvance * 0.5)
         }
     }
 

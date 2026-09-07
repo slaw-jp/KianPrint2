@@ -1,3 +1,4 @@
+import CoreText
 import XCTest
 @testable import KianPrintCore
 
@@ -132,5 +133,91 @@ final class TypographyTests: XCTestCase {
         let bottomMarginCenterY = document.settings.paperHeight - document.settings.bottomMargin / 2
         XCTAssertEqual(pageNumber.text.string, "1")
         XCTAssertEqual(textCenterY, bottomMarginCenterY, accuracy: 0.001)
+    }
+
+    func testHeadingSizesUseTheExactLegacyRatios() throws {
+        let document = try KianParser().parse("""
+        ---
+        文字サイズ: 15pt
+        ---
+        # 大見出し
+        ## 中見出し
+        ### 小見出し
+        #### 本文見出し
+        """)
+        let layout = KianLayoutEngine().layout(document)
+        let sizes = layout.pages[0].commands.compactMap { command -> CGFloat? in
+            guard case .text(let placed) = command,
+                  placed.text.length > 0,
+                  let fontAttribute = placed.text.attribute(
+                    kCTFontAttributeName as NSAttributedString.Key,
+                    at: 0,
+                    effectiveRange: nil
+                  ) else { return nil }
+            let font = fontAttribute as! CTFont
+            return CTFontGetSize(font)
+        }
+        XCTAssertEqual(sizes, [22.5, 20, 17.5, 15])
+    }
+
+    func testSealPlacementKeepsThirtyMillimetersClearAtRight() throws {
+        let document = try KianParser().parse("""
+        @右揃え(職印) {
+        原告訴訟代理人弁護士　架　空　太　郎
+        }
+        """)
+        let layout = KianLayoutEngine().layout(document)
+        guard case .text(let signature) = layout.pages[0].commands[0] else { return XCTFail() }
+        let expectedRight = document.settings.paperWidth
+            - document.settings.rightMargin
+            - 30 * KianSettings.pointsPerMillimeter
+        XCTAssertEqual(signature.origin.x + signature.width, expectedRight, accuracy: 0.001)
+    }
+
+    func testEvidenceListUsesFiledDocumentColumnProportions() throws {
+        let document = try KianParser().parse("""
+        @証拠説明書 {
+        | 符号番号 | 標目 |  | 作成年月日 | 作成者 | 立証趣旨 |
+        | --- | --- | --- | --- | --- | --- |
+        | 甲１ | 契約書 | 原本 | 令和８年 | 原告 | 契約の成立 |
+        }
+        """)
+        let layout = KianLayoutEngine().layout(document)
+        let top = document.settings.topMargin
+        let verticalXs = layout.pages[0].commands.compactMap { command -> CGFloat? in
+            guard case .line(let from, let to, _) = command,
+                  abs(from.x - to.x) < 0.001,
+                  abs(from.y - top) < 0.001 else { return nil }
+            return from.x
+        }
+        XCTAssertEqual(verticalXs.count, 7)
+        let fractions: [CGFloat] = [0.10, 0.29, 0.05, 0.15, 0.15, 0.26]
+        for index in fractions.indices {
+            XCTAssertEqual(
+                verticalXs[index + 1] - verticalXs[index],
+                document.settings.contentWidth * fractions[index],
+                accuracy: 0.001
+            )
+        }
+    }
+
+    func testPartyListRendersRecordsWithoutTableFieldLabels() throws {
+        let document = try KianParser().parse("""
+        # 当事者目録
+        | 種別 | 住所 | 氏名・名称 | 補足 |
+        | --- | --- | --- | --- |
+        | 原告 | 架空県架空市 | 株式会社架空商事 | 上記代表者代表取締役　架空花子 |
+        """)
+        let layout = KianLayoutEngine().layout(document)
+        let texts = layout.pages[0].commands.compactMap { command -> String? in
+            guard case .text(let placed) = command else { return nil }
+            return placed.text.string
+        }
+        XCTAssertTrue(texts.contains("架空県架空市"))
+        XCTAssertTrue(texts.contains("原告"))
+        XCTAssertTrue(texts.contains("株式会社架空商事"))
+        XCTAssertFalse(texts.contains("住所"))
+        XCTAssertFalse(texts.contains("氏名・名称"))
+        XCTAssertFalse(texts.contains("補足"))
     }
 }

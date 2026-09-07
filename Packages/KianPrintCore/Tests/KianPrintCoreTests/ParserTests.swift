@@ -163,4 +163,42 @@ final class ParserTests: XCTestCase {
         guard case .table(let table) = document.blocks[1] else { return XCTFail() }
         XCTAssertEqual(table.kind, .evidenceOpinion)
     }
+
+    func testEvidenceDocumentTitleAppliesAfterFirstPageMetadata() throws {
+        let document = try KianParser().parse("""
+        # 証拠意見書
+        @右揃え {
+        令和８年９月７日
+        }
+        架空地方裁判所民事部　御中
+        @右配置(職印) {
+        被告訴訟代理人弁護士　見　本　次　郎
+        }
+        | 項目 | 内容 |
+        | --- | --- |
+        | 架空 | 架空 |
+        """)
+        guard case .table(let table) = document.blocks.last else { return XCTFail() }
+        XCTAssertEqual(table.kind, .evidenceOpinion)
+    }
+
+    func testSealArgumentReservesThirtyMillimeters() throws {
+        let document = try KianParser().parse("""
+        @右配置(職印) {
+        原告訴訟代理人弁護士　架　空　太　郎
+        }
+        """)
+        guard case .blockBox(let box) = document.blocks[0] else { return XCTFail() }
+        XCTAssertEqual(box.trailingInset, 30 * KianSettings.pointsPerMillimeter, accuracy: 0.001)
+    }
+
+    func testEvidenceListRecognitionAcceptsFiledDocumentHeaders() throws {
+        let document = try KianParser().parse("""
+        | 符号<br>番号 | 標目 |  | 作成年月<br>日 | 作成者 | 立証趣旨 |
+        | --- | --- | --- | --- | --- | --- |
+        | 甲１ | 契約書 | 原本 | 令和８年 | 原告 | 契約の成立 |
+        """)
+        guard case .table(let table) = document.blocks[0] else { return XCTFail() }
+        XCTAssertEqual(table.kind, .evidenceList)
+    }
 }

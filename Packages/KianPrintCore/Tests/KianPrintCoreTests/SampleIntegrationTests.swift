@@ -17,6 +17,10 @@ final class SampleIntegrationTests: XCTestCase {
         XCTAssertEqual(urls.count, 7)
         for url in urls {
             let source = try String(contentsOf: url, encoding: .utf8)
+            XCTAssertNil(
+                source.range(of: #"[0-9]"#, options: .regularExpression),
+                "法律文書サンプルには半角数字を使わない: \(url.lastPathComponent)"
+            )
             let document = try KianParser().parse(source)
             let layout = KianLayoutEngine().layout(document)
             XCTAssertFalse(layout.pages.isEmpty, url.lastPathComponent)

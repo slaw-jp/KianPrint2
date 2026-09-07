@@ -49,11 +49,13 @@ public struct KianParser {
         }
 
         var recognizer = LegalNumberingRecognizer(allLines: lines)
+        var documentTableKind: KianTableKind?
         let blocks = try parseBlocks(
             lines: lines,
             range: cursor..<lines.count,
             recognizer: &recognizer,
-            surroundingHeading: nil,
+            documentTableKind: &documentTableKind,
+            surroundingTableKind: nil,
             forcedTableKind: nil
         )
         return KianDocument(settings: settings, blocks: blocks, issues: issues)
@@ -63,12 +65,13 @@ public struct KianParser {
         lines: [String],
         range: Range<Int>,
         recognizer: inout LegalNumberingRecognizer,
-        surroundingHeading: String?,
+        documentTableKind: inout KianTableKind?,
+        surroundingTableKind: KianTableKind?,
         forcedTableKind: KianTableKind?
     ) throws -> [KianBlock] {
         var blocks: [KianBlock] = []
         var index = range.lowerBound
-        var lastHeading = surroundingHeading
+        var pendingTableKind = surroundingTableKind
 
         while index < range.upperBound {
             let line = lines[index]
@@ -101,6 +104,14 @@ public struct KianParser {
                 let bodyRange = bodyStart..<end
                 switch directive.name {
                 case "右揃え", "中央揃え", "右配置":
+                    let trailingInset: CGFloat
+                    if directive.argument == nil {
+                        trailingInset = 0
+                    } else if directive.argument == "職印", directive.name != "中央揃え" {
+                        trailingInset = 30 * KianSettings.pointsPerMillimeter
+                    } else {
+                        throw KianIssue(line: index + 1, message: "@\(directive.name) の引数は「職印」だけを指定できます。")
+                    }
                     let paragraphs = bodyRange.map { bodyIndex -> KianParagraph in
                         let indent = recognizer.indent(for: lines[bodyIndex])
                         return KianParagraph(
@@ -114,7 +125,10 @@ public struct KianParser {
                     let box = KianBlockBox(
                         alignment: directive.name == "中央揃え" ? .center : .trailing,
                         contentAlignment: directive.name == "右配置" ? .leading : (directive.name == "中央揃え" ? .center : .trailing),
-                        width: directive.name == "右配置" ? .fit(maximumFraction: 0.58) : .full,
+                        width: directive.name == "右配置"
+                            ? .fit(maximumFraction: trailingInset > 0 ? 1 : 0.58)
+                            : .full,
+                        trailingInset: trailingInset,
                         paragraphs: paragraphs
                     )
                     blocks.append(.blockBox(box))
@@ -134,7 +148,8 @@ public struct KianParser {
                         lines: lines,
                         range: bodyRange,
                         recognizer: &recognizer,
-                        surroundingHeading: directive.name,
+                        documentTableKind: &documentTableKind,
+                        surroundingTableKind: kind,
                         forcedTableKind: kind
                     )
                     blocks.append(contentsOf: inner)
@@ -150,7 +165,13 @@ public struct KianParser {
                 if hashes <= 4, trimmed.dropFirst(hashes).first == " " {
                     let title = String(trimmed.dropFirst(hashes + 1))
                     blocks.append(.heading(KianHeading(level: hashes, inlines: parseInline(title), sourceLine: index + 1)))
-                    lastHeading = title.trimmingCharacters(in: .whitespaces)
+                    if let kind = semanticTableKind(for: title) {
+                        pendingTableKind = kind
+                        if hashes == 1, documentTableKind == nil,
+                           [.evidenceList, .evidenceRequest, .evidenceOpinion].contains(kind) {
+                            documentTableKind = kind
+                        }
+                    }
                     index += 1
                     continue
                 }
@@ -163,10 +184,11 @@ public struct KianParser {
                     lines: lines,
                     start: index,
                     upperBound: range.upperBound,
-                    heading: lastHeading,
+                    contextualKind: pendingTableKind ?? documentTableKind,
                     forcedKind: forcedTableKind
                 )
                 blocks.append(.table(parsed.table))
+                pendingTableKind = nil
                 index = parsed.nextIndex
                 continue
             }
@@ -327,7 +349,7 @@ public struct KianParser {
         lines: [String],
         start: Int,
         upperBound: Int,
-        heading: String?,
+        contextualKind: KianTableKind?,
         forcedKind: KianTableKind?
     ) -> (table: KianTable, nextIndex: Int) {
         let headerStrings = splitTableRow(lines[start])
@@ -348,20 +370,26 @@ public struct KianParser {
             index += 1
         }
         let headers = headerStrings.map { KianTableCell(inlines: parseInline($0)) }
-        let kind = forcedKind ?? inferTableKind(heading: heading, headers: headerStrings)
+        let kind = forcedKind ?? contextualKind ?? inferTableKind(headers: headerStrings)
         return (KianTable(headers: headers, alignments: alignments, rows: rows, kind: kind, sourceLine: start + 1), index)
     }
 
-    private func inferTableKind(heading: String?, headers: [String]) -> KianTableKind {
-        let heading = heading ?? ""
-        let header = Set(headers)
+    private func semanticTableKind(for heading: String) -> KianTableKind? {
         if heading.contains("証拠説明書") { return .evidenceList }
         if heading.contains("証拠調べ請求書") || heading.contains("証拠調請求書") { return .evidenceRequest }
         if heading.contains("証拠意見書") { return .evidenceOpinion }
         if heading.contains("附属書類") { return .attachments }
         if heading.contains("当事者目録") { return .parties }
+        return nil
+    }
 
-        if header.isSuperset(of: ["号証", "標目", "立証趣旨"]) { return .evidenceList }
+    private func inferTableKind(headers: [String]) -> KianTableKind {
+        let header = Set(headers.map {
+            $0.replacingOccurrences(of: "<br>", with: "", options: .caseInsensitive)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        })
+        if (header.contains("号証") || header.contains("符号番号"))
+            && header.contains("標目") && header.contains("立証趣旨") { return .evidenceList }
         if header.contains("立証趣旨") && (header.contains("証拠の標目") || header.contains("証人")) { return .evidenceRequest }
         if header.isSuperset(of: ["号証", "対象部分", "意見"]) { return .evidenceOpinion }
         if header.isSuperset(of: ["書類", "数量"]) { return .attachments }

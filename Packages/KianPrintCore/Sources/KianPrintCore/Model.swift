@@ -133,17 +133,21 @@ public struct KianBlockBox: Sendable, Equatable {
     public var alignment: KianTextAlignment
     public var contentAlignment: KianTextAlignment
     public var width: Width
+    /// Space kept clear at the right edge of the text frame, for example for a seal.
+    public var trailingInset: CGFloat
     public var paragraphs: [KianParagraph]
 
     public init(
         alignment: KianTextAlignment,
         contentAlignment: KianTextAlignment,
         width: Width,
+        trailingInset: CGFloat = 0,
         paragraphs: [KianParagraph]
     ) {
         self.alignment = alignment
         self.contentAlignment = contentAlignment
         self.width = width
+        self.trailingInset = trailingInset
         self.paragraphs = paragraphs
     }
 }
