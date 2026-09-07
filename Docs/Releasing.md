@@ -105,7 +105,7 @@ GitHubのリポジトリ設定でvisibilityをPublicへ変更する。Public化�
 
 その後、GitHub Releaseの下書きを確認して公開する。ログアウト状態またはプライベートブラウズで次を確認する。
 
-- README、LICENSE、SECURITY、CONTRIBUTINGが閲覧できる。
+- README、LICENSE、SECURITYが閲覧できる。
 - ReleaseがPre-releaseとして表示される。
 - ZIPを認証なしでダウンロードできる。
 - ZIPのSHA-256がRelease本文と一致する。
