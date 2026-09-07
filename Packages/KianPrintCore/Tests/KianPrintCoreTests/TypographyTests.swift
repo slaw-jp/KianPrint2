@@ -42,9 +42,9 @@ final class TypographyTests: XCTestCase {
         XCTAssertEqual(first.pages.map(\.commands.count), second.pages.map(\.commands.count))
     }
 
-    func testHeadingOccupiesOneNormalLineAndPageFits26Lines() throws {
+    func testAbsoluteSizeLineUsesEnoughAdvanceAndPageFits() throws {
         let body = (1...25).map { "本文\($0)" }.joined(separator: "\n")
-        let document = try KianParser().parse("# 見出し\n\(body)")
+        let document = try KianParser().parse("見出し@center@size(24)\n\(body)")
         let layout = KianLayoutEngine().layout(document)
 
         XCTAssertEqual(layout.pages.count, 1)
@@ -56,7 +56,7 @@ final class TypographyTests: XCTestCase {
         XCTAssertEqual(textOrigins[1].y - textOrigins[0].y, document.settings.lineAdvance, accuracy: 0.001)
     }
 
-    func testMatchingManualValuesDoNotGiveHeadingCourtLineAdvance() throws {
+    func testMatchingManualValuesUseSizedLineAdvance() throws {
         let body = (1...25).map { "本文\($0)" }.joined(separator: "\n")
         let source = """
         ---
@@ -69,7 +69,7 @@ final class TypographyTests: XCTestCase {
         spacing: 13.62pt
         kinsoku: court
         ---
-        # 見出し
+        見出し@center@size(18)
         \(body)
         """
         let document = try KianParser().parse(source)
@@ -135,15 +135,15 @@ final class TypographyTests: XCTestCase {
         XCTAssertEqual(textCenterY, bottomMarginCenterY, accuracy: 0.001)
     }
 
-    func testHeadingSizesUseTheExactLegacyRatios() throws {
+    func testSizeModifierUsesAbsolutePointSizes() throws {
         let document = try KianParser().parse("""
         ---
         font-size: 15pt
         ---
-        # 大見出し
-        ## 中見出し
-        ### 小見出し
-        #### 本文見出し
+        大見出し@size(24)
+        中見出し@size(20)
+        小見出し@size(14)
+        本文見出し
         """)
         let layout = KianLayoutEngine().layout(document)
         let sizes = layout.pages[0].commands.compactMap { command -> CGFloat? in
@@ -157,11 +157,11 @@ final class TypographyTests: XCTestCase {
             let font = fontAttribute as! CTFont
             return CTFontGetSize(font)
         }
-        XCTAssertEqual(sizes, [22.5, 20, 17.5, 15])
+        XCTAssertEqual(sizes, [24, 20, 14, 15])
     }
 
-    func testBoldUsesHiraginoSansW6WhileHeadingKeepsDocumentFont() throws {
-        let document = try KianParser().parse("# 見出し\n通常 **太字**")
+    func testBoldUsesHiraginoSansW6WhileSizedLineKeepsDocumentFont() throws {
+        let document = try KianParser().parse("見出し@center@size(18)\n通常 **太字**")
         let layout = KianLayoutEngine().layout(document)
         let texts = layout.pages[0].commands.compactMap { command -> KianPlacedText? in
             guard case .text(let placed) = command else { return nil }
@@ -186,13 +186,32 @@ final class TypographyTests: XCTestCase {
         XCTAssertEqual(text.origin.x + text.width, expectedRight, accuracy: 0.001)
     }
 
+    func testRightInsetIsAbsolutePointsAndAppliesToEveryWrappedLine() throws {
+        let document = try KianParser().parse("""
+        ---
+        left: 80mm
+        right: 80mm
+        ---
+        あいうえおかきくけこ@right(36)
+        """)
+        let layout = KianLayoutEngine().layout(document)
+        let lines = layout.pages[0].commands.compactMap { command -> KianPlacedText? in
+            guard case .text(let placed) = command else { return nil }
+            return placed
+        }
+        XCTAssertGreaterThan(lines.count, 1)
+        let expectedRight = document.settings.paperWidth - document.settings.rightMargin - 36
+        for line in lines {
+            XCTAssertEqual(line.origin.x + line.width, expectedRight, accuracy: 0.001)
+        }
+    }
+
     func testSpecifiedColumnWidthsAreAbsoluteAndTableStaysLeftAligned() throws {
         let document = try KianParser().parse("""
-        @table(4,8,3,6,6,10; center) {
-        | 符号番号 | 標目 |  | 作成年月日 | 作成者 | 立証趣旨 |
-        | --- | --- | --- | --- | --- | --- |
-        | 甲１ | 契約書 | 原本 | 令和８年 | 原告 | 契約の成立 |
-        }
+        @table(4,8,3,6,6,10)center\tcenter\tcenter\tcenter\tcenter\tleft
+        符号番号\t標目\t\t作成年月日\t作成者\t立証趣旨
+        center\tleft\tcenter\tcenter\tleft\tleft
+        甲１\t契約書\t原本\t令和８年\t原告\t契約の成立@end
         """)
         let layout = KianLayoutEngine().layout(document)
         let top = document.settings.topMargin
@@ -219,10 +238,8 @@ final class TypographyTests: XCTestCase {
         ---
         font-size: 18pt
         ---
-        @table(2,3) {
-        | 一 | 二 |
-        | --- | --- |
-        }
+        @table(2,3)left\tleft
+        一\t二@end
         """)
         let layout = KianLayoutEngine().layout(document)
         let top = document.settings.topMargin
@@ -239,11 +256,10 @@ final class TypographyTests: XCTestCase {
 
     func testFirstRowCanBeCenteredWhileBodyUsesColumnAlignment() throws {
         let document = try KianParser().parse("""
-        @table(8,12; center) {
-        | 標目 | 作成者 |
-        | --- | --- |
-        | 契約書 | 原告及び被告 |
-        }
+        @table(8,12)center\tcenter
+        標目\t作成者
+        left\tleft
+        契約書\t原告及び被告@end
         """)
         let layout = KianLayoutEngine().layout(document)
         let texts = layout.pages[0].commands.compactMap { command -> KianPlacedText? in
@@ -256,12 +272,41 @@ final class TypographyTests: XCTestCase {
         XCTAssertEqual(body.origin.x, document.settings.leftMargin + 3, accuracy: 0.001)
     }
 
-    func testTabIntervalsAreRelativeAndPlacePartyListFields() throws {
-        let document = try KianParser().parse("""
-        @tab(10,11) {
-        \t原　告\t株式会社架空商事
-        \t上記代表者代表取締役\t架　空　花　子
+    func testTableHeaderRepeatsUnlessPureTableIsSpecified() throws {
+        let rows = (1...10).map { "行\($0)\t内容" }.joined(separator: "\n")
+        let commonSettings = """
+        ---
+        top: 120mm
+        bottom: 120mm
+        ---
+        """
+        let regular = try KianParser().parse("""
+        \(commonSettings)
+        @table(6,12)center\tcenter
+        見出し\t内容
+        \(rows)@end
+        """)
+        let pure = try KianParser().parse("""
+        \(commonSettings)
+        @table(6,12;puretable)center\tcenter
+        見出し\t内容
+        \(rows)@end
+        """)
+        func headerCount(_ document: KianDocument) -> Int {
+            KianLayoutEngine().layout(document).pages.flatMap(\.commands).filter { command in
+                guard case .text(let placed) = command else { return false }
+                return placed.text.string == "見出し"
+            }.count
         }
+        XCTAssertGreaterThan(headerCount(regular), 1)
+        XCTAssertEqual(headerCount(pure), 1)
+    }
+
+    func testTabColumnWidthsPlacePartyListFields() throws {
+        let document = try KianParser().parse("""
+        @tab(10,11,16)left\tleft\tleft
+        \t原　告\t株式会社架空商事
+        \t上記代表者代表取締役\t架　空　花　子@end
         """)
         let layout = KianLayoutEngine().layout(document)
         let texts = layout.pages[0].commands.compactMap { command -> KianPlacedText? in
@@ -280,9 +325,8 @@ final class TypographyTests: XCTestCase {
 
     func testEachTabUsesItsCorrespondingStopEvenWhenTheFieldWraps() throws {
         let document = try KianParser().parse("""
-        @tab(1,7) {
-        　訴訟物の価額\t１００万円
-        }
+        @tab(1,7)left\tleft
+        　訴訟物の価額\t１００万円@end
         """)
         let layout = KianLayoutEngine().layout(document)
         let texts = layout.pages[0].commands.compactMap { command -> KianPlacedText? in
@@ -298,9 +342,8 @@ final class TypographyTests: XCTestCase {
 
     func testTabCellDoesNotLeaveOneCharacterAloneOnLastLine() throws {
         let document = try KianParser().parse("""
-        @tab(10,11) {
-        \t上記代表者代表取締役社長\t架　空　花　子
-        }
+        @tab(10,11,16)left\tleft\tleft
+        \t上記代表者代表取締役社長\t架　空　花　子@end
         """)
         let layout = KianLayoutEngine().layout(document)
         let texts = layout.pages[0].commands.compactMap { command -> KianPlacedText? in
@@ -317,11 +360,10 @@ final class TypographyTests: XCTestCase {
         XCTAssertEqual(secondLine.origin.y - firstLine.origin.y, document.settings.lineAdvance, accuracy: 0.001)
     }
 
-    func testTabIntervalsCanDefineMoreThanTwoStops() throws {
+    func testTabCanDefineMoreThanTwoColumns() throws {
         let document = try KianParser().parse("""
-        @tab(2,3,4,5) {
-        一\t二\t三\t四\t五
-        }
+        @tab(2,3,4,5,6)left\tleft\tleft\tleft\tleft
+        一\t二\t三\t四\t五@end
         """)
         let layout = KianLayoutEngine().layout(document)
         let origins = layout.pages[0].commands.compactMap { command -> CGFloat? in
@@ -340,9 +382,8 @@ final class TypographyTests: XCTestCase {
         ---
         font-size: 18pt
         ---
-        @tab(2,3) {
-        一\t二\t三
-        }
+        @tab(2,3,4)left\tleft\tleft
+        一\t二\t三@end
         """)
         let layout = KianLayoutEngine().layout(document)
         let origins = layout.pages[0].commands.compactMap { command -> CGFloat? in
@@ -352,6 +393,28 @@ final class TypographyTests: XCTestCase {
         XCTAssertEqual(origins.count, 3)
         XCTAssertEqual(origins[1] - document.settings.leftMargin, 36, accuracy: 0.001)
         XCTAssertEqual(origins[2] - document.settings.leftMargin, 90, accuracy: 0.001)
+    }
+
+    func testTabAlignmentsApplyToEveryCellAndCanChange() throws {
+        let document = try KianParser().parse("""
+        @tab(6,6)left\tright
+        左\t右
+        center\tcenter
+        中央一\t中央二@end
+        """)
+        let layout = KianLayoutEngine().layout(document)
+        let texts = layout.pages[0].commands.compactMap { command -> KianPlacedText? in
+            guard case .text(let placed) = command, !placed.text.string.isEmpty else { return nil }
+            return placed
+        }
+        let left = try XCTUnwrap(texts.first { $0.text.string == "左" })
+        let right = try XCTUnwrap(texts.first { $0.text.string == "右" })
+        let centerOne = try XCTUnwrap(texts.first { $0.text.string == "中央一" })
+        let centerTwo = try XCTUnwrap(texts.first { $0.text.string == "中央二" })
+        XCTAssertEqual(left.origin.x, document.settings.leftMargin, accuracy: 0.001)
+        XCTAssertEqual(right.origin.x + right.width, document.settings.leftMargin + 12 * 12, accuracy: 0.001)
+        XCTAssertEqual(centerOne.origin.x + centerOne.width / 2, document.settings.leftMargin + 3 * 12, accuracy: 0.001)
+        XCTAssertEqual(centerTwo.origin.x + centerTwo.width / 2, document.settings.leftMargin + 9 * 12, accuracy: 0.001)
     }
 
     private func paragraphFont(in attributed: NSAttributedString, at index: Int) -> CTFont {

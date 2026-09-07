@@ -96,19 +96,27 @@ public struct KianParagraph: Sendable, Equatable {
     public var indentLevel: Int
     public var firstLineOutdent: Int
     public var alignment: KianTextAlignment
+    /// An absolute point size applied to this source line. `nil` uses the document size.
+    public var fontSize: CGFloat?
+    /// Absolute points kept clear at the right edge when the line is right-aligned.
+    public var trailingInset: CGFloat
 
     public init(
         inlines: [KianInline],
         sourceLine: Int,
         indentLevel: Int = 0,
         firstLineOutdent: Int = 0,
-        alignment: KianTextAlignment = .leading
+        alignment: KianTextAlignment = .leading,
+        fontSize: CGFloat? = nil,
+        trailingInset: CGFloat = 0
     ) {
         self.inlines = inlines
         self.sourceLine = sourceLine
         self.indentLevel = indentLevel
         self.firstLineOutdent = firstLineOutdent
         self.alignment = alignment
+        self.fontSize = fontSize
+        self.trailingInset = trailingInset
     }
 
     public var plainText: String { inlines.map(\.text).joined() }
@@ -164,56 +172,60 @@ public struct KianTableCell: Sendable, Equatable {
 
 public struct KianTableRow: Sendable, Equatable {
     public var cells: [KianTableCell]
+    public var alignments: [KianColumnAlignment]
     public var sourceLine: Int
-    public init(cells: [KianTableCell], sourceLine: Int) {
+    public init(cells: [KianTableCell], alignments: [KianColumnAlignment], sourceLine: Int) {
         self.cells = cells
+        self.alignments = alignments
         self.sourceLine = sourceLine
     }
 }
 
 public struct KianTable: Sendable, Equatable {
     public var headers: [KianTableCell]
-    public var alignments: [KianColumnAlignment]
+    public var headerAlignments: [KianColumnAlignment]
     public var rows: [KianTableRow]
     /// Absolute column widths measured in document-font-size units.
-    public var columnWidthsInFontUnits: [CGFloat]?
-    public var firstRowAlignment: KianColumnAlignment?
+    public var columnWidthsInFontUnits: [CGFloat]
+    public var repeatsHeader: Bool
     public var sourceLine: Int
 
     public init(
         headers: [KianTableCell],
-        alignments: [KianColumnAlignment],
+        headerAlignments: [KianColumnAlignment],
         rows: [KianTableRow],
-        columnWidthsInFontUnits: [CGFloat]? = nil,
-        firstRowAlignment: KianColumnAlignment? = nil,
+        columnWidthsInFontUnits: [CGFloat],
+        repeatsHeader: Bool = true,
         sourceLine: Int
     ) {
         self.headers = headers
-        self.alignments = alignments
+        self.headerAlignments = headerAlignments
         self.rows = rows
         self.columnWidthsInFontUnits = columnWidthsInFontUnits
-        self.firstRowAlignment = firstRowAlignment
+        self.repeatsHeader = repeatsHeader
         self.sourceLine = sourceLine
     }
 }
 
 public struct KianTabbedLine: Sendable, Equatable {
     public var cells: [[KianInline]]
+    public var alignments: [KianColumnAlignment]
     public var sourceLine: Int
 
-    public init(cells: [[KianInline]], sourceLine: Int) {
+    public init(cells: [[KianInline]], alignments: [KianColumnAlignment], sourceLine: Int) {
         self.cells = cells
+        self.alignments = alignments
         self.sourceLine = sourceLine
     }
 }
 
 public struct KianTabbedBlock: Sendable, Equatable {
-    /// Distances from the preceding tab stop, measured in document-font-size units.
-    public var tabIntervalsInFontUnits: [CGFloat]
+    /// Column widths measured in document-font-size units.
+    public var columnWidthsInFontUnits: [CGFloat]
     public var lines: [KianTabbedLine]
 
-    public init(tabIntervalsInFontUnits: [CGFloat], lines: [KianTabbedLine]) {
-        self.tabIntervalsInFontUnits = tabIntervalsInFontUnits
+    public init(columnWidthsInFontUnits: [CGFloat], lines: [KianTabbedLine]) {
+        self.columnWidthsInFontUnits = columnWidthsInFontUnits
         self.lines = lines
     }
 }

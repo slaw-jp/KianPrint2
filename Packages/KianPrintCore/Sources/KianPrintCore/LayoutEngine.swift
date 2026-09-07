@@ -69,20 +69,33 @@ private final class LayoutBuilder {
         let unit = settings.fontSize
         let leadingX = settings.leftMargin + CGFloat(paragraph.indentLevel) * unit
         let firstX = max(settings.leftMargin, leadingX - CGFloat(paragraph.firstLineOutdent) * unit)
-        let attributed = KianTypography.attributedString(from: paragraph.inlines, settings: settings)
-        let firstWidth = settings.paragraphContentWidth - (firstX - settings.leftMargin)
-        let subsequentWidth = settings.paragraphContentWidth - (leadingX - settings.leftMargin)
+        let attributed = KianTypography.attributedString(
+            from: paragraph.inlines,
+            settings: settings,
+            fontSize: paragraph.fontSize
+        )
+        let availableContentWidth = max(1, settings.paragraphContentWidth - paragraph.trailingInset)
+        let firstWidth = max(1, availableContentWidth - (firstX - settings.leftMargin))
+        let subsequentWidth = max(1, availableContentWidth - (leadingX - settings.leftMargin))
         let lines = breaker.breakLines(
             attributed,
             firstLineWidth: firstWidth,
             subsequentLineWidth: subsequentWidth
         )
+        let advance: CGFloat
+        if let fontSize = paragraph.fontSize {
+            advance = settings.usesStandardCourtGrid
+                ? max(baseAdvance, fontSize)
+                : fontSize + settings.lineSpacing
+        } else {
+            advance = baseAdvance
+        }
         for (index, line) in lines.enumerated() {
-            ensureSpace(baseAdvance)
+            ensureSpace(advance)
             let baseX = index == 0 ? firstX : leadingX
             let available = index == 0 ? firstWidth : subsequentWidth
             append(line, x: alignedX(base: baseX, available: available, width: line.width, alignment: paragraph.alignment), y: cursorY)
-            cursorY += baseAdvance
+            cursorY += advance
         }
     }
 
@@ -144,21 +157,24 @@ private final class LayoutBuilder {
         guard !table.headers.isEmpty else { return }
         let widths = columnWidths(for: table)
         let boldHeader = false
-        let headerAlignments = table.firstRowAlignment.map {
-            Array(repeating: $0, count: table.headers.count)
-        } ?? table.alignments
         let headerHeight = tableRowHeight(cells: table.headers, widths: widths, bold: boldHeader)
-        let firstRowHeight = table.rows.first.map { tableRowHeight(cells: $0.cells, widths: widths, bold: false) } ?? 0
-        ensureSpace(headerHeight + firstRowHeight)
-        drawGridRow(cells: table.headers, widths: widths, height: headerHeight, alignments: headerAlignments, bold: boldHeader, topWeight: .thin)
+        if table.repeatsHeader {
+            let firstRowHeight = table.rows.first.map { tableRowHeight(cells: $0.cells, widths: widths, bold: false) } ?? 0
+            ensureSpace(headerHeight + firstRowHeight)
+        } else {
+            ensureSpace(headerHeight)
+        }
+        drawGridRow(cells: table.headers, widths: widths, height: headerHeight, alignments: table.headerAlignments, bold: boldHeader, topWeight: .thin)
 
         for row in table.rows {
             let height = tableRowHeight(cells: row.cells, widths: widths, bold: false)
             if contentBottom - cursorY < height {
                 newPage(force: false)
-                drawGridRow(cells: table.headers, widths: widths, height: headerHeight, alignments: headerAlignments, bold: boldHeader, topWeight: .thin)
+                if table.repeatsHeader {
+                    drawGridRow(cells: table.headers, widths: widths, height: headerHeight, alignments: table.headerAlignments, bold: boldHeader, topWeight: .thin)
+                }
             }
-            drawGridRow(cells: row.cells, widths: widths, height: height, alignments: table.alignments, bold: false, topWeight: .thin)
+            drawGridRow(cells: row.cells, widths: widths, height: height, alignments: row.alignments, bold: false, topWeight: .thin)
         }
     }
 
@@ -211,7 +227,8 @@ private final class LayoutBuilder {
     private func columnWidths(for table: KianTable) -> [CGFloat] {
         let count = table.headers.count
         guard count > 0 else { return [] }
-        if let widths = table.columnWidthsInFontUnits, widths.count == count {
+        if table.columnWidthsInFontUnits.count == count {
+            let widths = table.columnWidthsInFontUnits
             return widths.map { $0 * settings.fontSize }
         }
 
@@ -229,27 +246,28 @@ private final class LayoutBuilder {
     }
 
     private func layoutTabbedBlock(_ block: KianTabbedBlock) {
-        var cumulativeOffset: CGFloat = 0
-        let tabStops = block.tabIntervalsInFontUnits.map { interval -> CGFloat in
-            cumulativeOffset += interval * settings.fontSize
-            return cumulativeOffset
-        }
+        let widths = block.columnWidthsInFontUnits.map { $0 * settings.fontSize }
+        var offsets = Array(repeating: CGFloat(0), count: widths.count)
+        for index in 1..<offsets.count { offsets[index] = offsets[index - 1] + widths[index - 1] }
         for row in block.lines {
             let measuredCells = row.cells.enumerated().map { index, inlines -> [KianMeasuredLine] in
-                let xOffset = index == 0 ? 0 : tabStops[index - 1]
-                let nextOffset = index == row.cells.count - 1 ? settings.contentWidth : tabStops[index]
-                let width = max(1, nextOffset - xOffset)
                 let attributed = KianTypography.attributedString(from: inlines, settings: settings)
-                return breakTabbedCell(attributed, width: width)
+                return breakTabbedCell(attributed, width: max(1, widths[index]))
             }
             let rowHeight = CGFloat(max(1, measuredCells.map(\.count).max() ?? 1)) * baseAdvance
             ensureSpace(rowHeight)
             for (index, lines) in measuredCells.enumerated() {
-                let xOffset = index == 0 ? 0 : tabStops[index - 1]
                 for (lineIndex, line) in lines.enumerated() {
+                    let alignment = index < row.alignments.count ? row.alignments[index] : .leading
+                    let x: CGFloat
+                    switch alignment {
+                    case .leading: x = settings.leftMargin + offsets[index]
+                    case .center: x = settings.leftMargin + offsets[index] + (widths[index] - line.width) / 2
+                    case .trailing: x = settings.leftMargin + offsets[index] + widths[index] - line.width
+                    }
                     append(
                         line,
-                        x: settings.leftMargin + xOffset,
+                        x: x,
                         y: cursorY + CGFloat(lineIndex) * baseAdvance
                     )
                 }

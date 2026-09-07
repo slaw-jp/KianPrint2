@@ -10,7 +10,7 @@
             <key>CFBundleTypeExtensions</key>
             <array><string>txt</string></array>
             <key>CFBundleTypeName</key>
-            <string>Kian Markdown文書</string>
+            <string>KianPrint2文書</string>
             <key>CFBundleTypeRole</key>
             <string>Viewer</string>
             <key>LSHandlerRank</key>
@@ -36,7 +36,7 @@
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSHumanReadableCopyright</key>
-    <string>Copyright © 2026 Hiroki. Released under the MIT License.</string>
+    <string>Copyright © 2026 Sato Hiroki. Released under the MIT License.</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
 </dict>

@@ -16,8 +16,8 @@
 
 ファイル監視は開いたファイル自身ではなく親ディレクトリへ `DispatchSourceFileSystemObject` を設定する。エディタが元ファイルを置換するatomic save後も監視対象ディレクトリは存続する。イベントは220ms debounceし、読み込みまたはパースに失敗した場合は最後の正常な `KianLayout` を保持する。
 
-## Markdownパーサ選定
+## 独自記法パーサ
 
-2026-09-07時点の `swiftlang/swift-markdown` 最新リリース0.8.0を検討した。同ライブラリはGFM ASTと表を提供する一方、KianPrint2では日本語Directiveの前処理、旧式行単位記法、厳密なsource line mapping、軽量な配布を優先する。β版の対象構文は限定されているため、依存を追加せず専用ブロックパーサを採用した。
+2026-09-08、Markdownから独立したプレーンテキスト向け構文へ移行した。KianPrint2では、Tabで区切る `@table`／`@tab`、行末の `@right`／`@center`／`@size`、厳密なsource line mapping、軽量な配布を優先し、依存を追加しない専用パーサを使用する。
 
-現在のパーサはGFM全体を実装するものではない。対象は見出し、太字、斜体、引用、パイプ表、セル内 `<br>`、英語Directive（`@tab`、`@table`、`@page`）である。将来構文範囲を広げる場合は0.8.0以降へ固定してAST部分を置換できるよう、出力先を `KianDocument` に隔離している。
+Markdown由来で解釈するのは行内の太字と斜体だけである。Markdown見出し、引用、パイプ表、セル内 `<br>` は解釈しない。先代KianPrint由来の全角空白による中央・右揃えは互換入力として残すが、KianPrint2で一時採用していた波括弧形式の `@table`／`@tab` は受け付けない。パーサーの出力先は引き続き `KianDocument` に隔離する。

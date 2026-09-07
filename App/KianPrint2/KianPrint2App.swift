@@ -7,10 +7,9 @@ struct KianPrint2App: App {
     @StateObject private var documentController = DocumentController.shared
 
     var body: some Scene {
-        WindowGroup {
+        Window("KianPrint2", id: "main") {
             ContentView(controller: documentController)
-                .frame(minWidth: 760, minHeight: 640)
-                .onOpenURL { documentController.open(url: $0) }
+                .frame(minWidth: 380, minHeight: 320)
         }
         .commands {
             CommandGroup(replacing: .newItem) {
@@ -18,10 +17,13 @@ struct KianPrint2App: App {
                     .keyboardShortcut("o")
                 Button("再読み込み") { documentController.reload() }
                     .keyboardShortcut("r")
-            }
-            CommandGroup(after: .saveItem) {
+
+                Divider()
+
                 Button("PDFを書き出す…") { documentController.showExportPanel() }
                     .keyboardShortcut("e", modifiers: [.command, .shift])
+                    .disabled(documentController.fileURL == nil)
+                Button("mi.appで編集") { documentController.editInMi() }
                     .disabled(documentController.fileURL == nil)
             }
         }

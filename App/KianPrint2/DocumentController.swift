@@ -27,7 +27,7 @@ final class DocumentController: ObservableObject {
 
     func showOpenPanel() {
         let panel = NSOpenPanel()
-        panel.title = "Kian Markdown文書を開く"
+        panel.title = "KianPrint2文書を開く"
         panel.allowedContentTypes = [.plainText]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false

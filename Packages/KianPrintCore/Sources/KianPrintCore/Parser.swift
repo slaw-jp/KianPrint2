@@ -52,9 +52,7 @@ public struct KianParser {
         let blocks = try parseBlocks(
             lines: lines,
             range: cursor..<lines.count,
-            recognizer: &recognizer,
-            forcedColumnWidths: nil,
-            forcedFirstRowAlignment: nil
+            recognizer: &recognizer
         )
         return KianDocument(settings: settings, blocks: blocks, issues: issues)
     }
@@ -62,9 +60,7 @@ public struct KianParser {
     private func parseBlocks(
         lines: [String],
         range: Range<Int>,
-        recognizer: inout LegalNumberingRecognizer,
-        forcedColumnWidths: [CGFloat]?,
-        forcedFirstRowAlignment: KianColumnAlignment?
+        recognizer: inout LegalNumberingRecognizer
     ) throws -> [KianBlock] {
         var blocks: [KianBlock] = []
         var index = range.lowerBound
@@ -83,84 +79,31 @@ public struct KianParser {
                 continue
             }
 
-            if let directive = directiveStart(trimmed) {
-                let bodyStart = index + 1
-                var end = bodyStart
-                while end < range.upperBound, lines[end].trimmingCharacters(in: .whitespaces) != "}" {
-                    end += 1
-                }
-                guard end < range.upperBound else {
-                    throw KianIssue(line: index + 1, message: "@\(directive.name) を閉じる } がありません。")
-                }
-                let bodyRange = bodyStart..<end
-                switch directive.name {
-                case "table":
-                    let options = try parseTableOptions(
-                        directive.argument,
-                        directiveName: directive.name,
-                        line: index + 1
-                    )
-                    let inner = try parseBlocks(
-                        lines: lines,
-                        range: bodyRange,
-                        recognizer: &recognizer,
-                        forcedColumnWidths: options.columnWidths,
-                        forcedFirstRowAlignment: options.firstRowAlignment
-                    )
-                    blocks.append(contentsOf: inner)
-                case "tab":
-                    let tabIntervals = try parseTabIntervals(directive.argument, line: index + 1)
-                    let tabbedLines = try bodyRange.map { bodyIndex in
-                        let cells = lines[bodyIndex].split(separator: "\t", omittingEmptySubsequences: false).map {
-                            parseInline(String($0))
-                        }
-                        guard cells.count <= tabIntervals.count + 1 else {
-                            throw KianIssue(line: bodyIndex + 1, message: "指定したタブ間隔の個数より多くのTab文字があります。")
-                        }
-                        return KianTabbedLine(cells: cells, sourceLine: bodyIndex + 1)
-                    }
-                    blocks.append(.tabbed(KianTabbedBlock(tabIntervalsInFontUnits: tabIntervals, lines: tabbedLines)))
-                default:
-                    throw KianIssue(line: index + 1, message: "未知のDirective @\(directive.name) です。")
-                }
-                index = end + 1
+            if trimmed.hasPrefix("@table") {
+                let parsed = try parseNewTable(lines: lines, start: index, upperBound: range.upperBound)
+                blocks.append(.table(parsed.table))
+                index = parsed.nextIndex
+                continue
+            }
+            if trimmed.hasPrefix("@tab") {
+                let parsed = try parseNewTabbedBlock(lines: lines, start: index, upperBound: range.upperBound)
+                blocks.append(.tabbed(parsed.block))
+                index = parsed.nextIndex
                 continue
             }
 
-            if trimmed.hasPrefix("@") {
-                throw KianIssue(line: index + 1, message: "未知のDirective \(trimmed) です。")
-            }
-
-            if trimmed.hasPrefix("#") {
-                let hashes = trimmed.prefix { $0 == "#" }.count
-                if hashes <= 4, trimmed.dropFirst(hashes).first == " " {
-                    let title = String(trimmed.dropFirst(hashes + 1))
-                    blocks.append(.heading(KianHeading(level: hashes, inlines: parseInline(title), sourceLine: index + 1)))
-                    index += 1
-                    continue
-                }
+            if trimmed == "@end" || line.hasSuffix("@end") {
+                throw KianIssue(line: index + 1, message: "@end は @table または @tab の最終データ行の末尾にだけ書けます。")
             }
 
             if index + 1 < range.upperBound,
                isTableRow(line),
                isTableSeparator(lines[index + 1]) {
-                let parsed = try parseTable(
-                    lines: lines,
-                    start: index,
-                    upperBound: range.upperBound,
-                    forcedColumnWidths: forcedColumnWidths,
-                    forcedFirstRowAlignment: forcedFirstRowAlignment
-                )
-                blocks.append(.table(parsed.table))
-                index = parsed.nextIndex
-                continue
+                throw KianIssue(line: index + 1, message: "Markdown表は使用できません。@table(...) で始め、Tabでセルを区切り、最終行を @end で閉じてください。")
             }
 
-            if trimmed.hasPrefix(">") {
-                let content = trimmed.dropFirst().trimmingCharacters(in: .whitespaces)
-                blocks.append(.quote(KianParagraph(inlines: parseInline(content), sourceLine: index + 1, indentLevel: 1)))
-                index += 1
-                continue
+            if trimmed.hasPrefix("@") {
+                throw KianIssue(line: index + 1, message: "未知のDirective \(trimmed) です。")
             }
 
             if let legacy = legacyAlignedParagraph(line, sourceLine: index + 1) {
@@ -169,12 +112,16 @@ public struct KianParser {
                 continue
             }
 
-            let indent = recognizer.indent(for: line)
+            let styledLine = try parseLineStyle(line, line: index + 1)
+            let indent = recognizer.indent(for: styledLine.text)
             blocks.append(.paragraph(KianParagraph(
-                inlines: parseInline(line),
+                inlines: parseInline(styledLine.text),
                 sourceLine: index + 1,
                 indentLevel: indent.level,
-                firstLineOutdent: indent.outdent
+                firstLineOutdent: indent.outdent,
+                alignment: styledLine.alignment,
+                fontSize: styledLine.fontSize,
+                trailingInset: styledLine.trailingInset
             )))
             index += 1
         }
@@ -256,46 +203,46 @@ public struct KianParser {
         return CGFloat(value) * KianSettings.pointsPerMillimeter
     }
 
-    private struct TableOptions {
-        var columnWidths: [CGFloat]?
-        var firstRowAlignment: KianColumnAlignment?
+    private struct CollectionStart {
+        var widths: [CGFloat]
+        var alignments: [KianColumnAlignment]
+        var pureTable: Bool
     }
 
-    private func parseTableOptions(
-        _ argument: String?,
-        directiveName: String,
-        line: Int
-    ) throws -> TableOptions {
-        guard let argument else { return TableOptions() }
+    private func parseCollectionStart(_ rawLine: String, name: String, line: Int) throws -> CollectionStart {
+        let source = rawLine.trimmingCharacters(in: .whitespaces)
+        if source.hasSuffix("{") {
+            throw KianIssue(line: line, message: "KianPrint2の旧 @\(name) 文法は使用できません。{ } を除き、最終データ行を @end で閉じてください。")
+        }
+        let prefix = "@\(name)("
+        guard source.hasPrefix(prefix), let close = source.firstIndex(of: ")") else {
+            throw KianIssue(line: line, message: "@\(name) は @\(name)(6,6)left<Tab>right の形式で指定してください。")
+        }
+        let argumentStart = source.index(source.startIndex, offsetBy: prefix.count)
+        let argument = String(source[argumentStart..<close])
+        let tail = String(source[source.index(after: close)...])
+        guard !tail.contains("(") && !tail.contains(")") else {
+            throw KianIssue(line: line, message: "@\(name) の開始宣言が正しくありません。")
+        }
+
         let components = argument.split(
             omittingEmptySubsequences: false,
             whereSeparator: { $0 == ";" || $0 == "；" }
         )
         guard (1...2).contains(components.count) else {
-            throw KianIssue(line: line, message: "@\(directiveName) は @table(4,8,3; center) の形式で指定してください。")
+            throw KianIssue(line: line, message: "@\(name) の列幅指定が正しくありません。")
         }
-        var result = TableOptions()
-        result.columnWidths = try parsePositiveNumbers(
-            String(components[0]),
-            line: line,
-            description: "column widths"
-        )
+        let widths = try parsePositiveNumbers(String(components[0]), line: line, description: "列幅")
+        var pureTable = false
         if components.count == 2 {
-            switch components[1].trimmingCharacters(in: .whitespaces).lowercased() {
-            case "center": result.firstRowAlignment = .center
-            case "right": result.firstRowAlignment = .trailing
-            default:
-                throw KianIssue(line: line, message: "先頭行の配置は center または right で指定してください。")
+            guard name == "table",
+                  components[1].trimmingCharacters(in: .whitespaces).lowercased() == "puretable" else {
+                throw KianIssue(line: line, message: "@table のオプションには puretable だけを指定できます。")
             }
+            pureTable = true
         }
-        return result
-    }
-
-    private func parseTabIntervals(_ argument: String?, line: Int) throws -> [CGFloat] {
-        guard let argument else {
-            throw KianIssue(line: line, message: "@tab には @tab(4,6) のように前のタブ位置からの間隔を指定してください。")
-        }
-        return try parsePositiveNumbers(argument, line: line, description: "タブ間隔")
+        let alignments = try normalizedAlignments(from: tail, columnCount: widths.count, line: line)
+        return CollectionStart(widths: widths, alignments: alignments, pureTable: pureTable)
     }
 
     private func parsePositiveNumbers(
@@ -313,14 +260,136 @@ public struct KianParser {
         return numbers
     }
 
-    private func directiveStart(_ line: String) -> (name: String, argument: String?)? {
-        guard line.hasPrefix("@") else { return nil }
-        guard line.hasSuffix("{") else { return nil }
-        let head = line.dropFirst().dropLast().trimmingCharacters(in: .whitespaces)
-        if let open = head.firstIndex(of: "("), head.hasSuffix(")") {
-            return (String(head[..<open]), String(head[head.index(after: open)..<head.index(before: head.endIndex)]))
+    private func normalizedAlignments(from raw: String, columnCount: Int, line: Int) throws -> [KianColumnAlignment] {
+        let tokens = raw.isEmpty ? [] : raw.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+        var result = try tokens.map { token -> KianColumnAlignment in
+            switch token.lowercased() {
+            case "left": return .leading
+            case "center": return .center
+            case "right": return .trailing
+            default:
+                throw KianIssue(line: line, message: "配置は left、center、right をTabで区切って指定してください。")
+            }
         }
-        return (head, nil)
+        result = Array(result.prefix(columnCount))
+        while result.count < columnCount { result.append(.leading) }
+        return result
+    }
+
+    private func alignmentDeclaration(_ raw: String, columnCount: Int, line: Int) throws -> [KianColumnAlignment]? {
+        let tokens = raw.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+        guard !tokens.isEmpty, tokens.allSatisfy({ ["left", "center", "right"].contains($0.lowercased()) }) else {
+            return nil
+        }
+        return try normalizedAlignments(from: raw, columnCount: columnCount, line: line)
+    }
+
+    private func parseNewTable(
+        lines: [String],
+        start: Int,
+        upperBound: Int
+    ) throws -> (table: KianTable, nextIndex: Int) {
+        let declaration = try parseCollectionStart(lines[start], name: "table", line: start + 1)
+        var currentAlignments = declaration.alignments
+        var parsedRows: [KianTableRow] = []
+        var index = start + 1
+        var foundEnd = false
+
+        while index < upperBound {
+            let raw = lines[index]
+            let endsBlock = raw.hasSuffix("@end")
+            let content = endsBlock ? String(raw.dropLast(4)) : raw
+            if endsBlock && content.isEmpty {
+                throw KianIssue(line: index + 1, message: "@end は独立行にせず、最終データ行の末尾に書いてください。")
+            }
+            if !parsedRows.isEmpty, let changed = try alignmentDeclaration(content, columnCount: declaration.widths.count, line: index + 1) {
+                guard !endsBlock else {
+                    throw KianIssue(line: index + 1, message: "@end は配置宣言ではなく最終データ行の末尾に書いてください。")
+                }
+                currentAlignments = changed
+                index += 1
+                continue
+            }
+            let cells = try tableCells(content, columnCount: declaration.widths.count, line: index + 1)
+            parsedRows.append(KianTableRow(cells: cells, alignments: currentAlignments, sourceLine: index + 1))
+            index += 1
+            if endsBlock {
+                foundEnd = true
+                break
+            }
+        }
+        guard foundEnd else {
+            throw KianIssue(line: start + 1, message: "@table の最終データ行を閉じる @end がありません。")
+        }
+        guard let first = parsedRows.first else {
+            throw KianIssue(line: start + 1, message: "@table には少なくとも1行のデータが必要です。")
+        }
+        return (KianTable(
+            headers: first.cells,
+            headerAlignments: first.alignments,
+            rows: Array(parsedRows.dropFirst()),
+            columnWidthsInFontUnits: declaration.widths,
+            repeatsHeader: !declaration.pureTable,
+            sourceLine: first.sourceLine
+        ), index)
+    }
+
+    private func parseNewTabbedBlock(
+        lines: [String],
+        start: Int,
+        upperBound: Int
+    ) throws -> (block: KianTabbedBlock, nextIndex: Int) {
+        let declaration = try parseCollectionStart(lines[start], name: "tab", line: start + 1)
+        var currentAlignments = declaration.alignments
+        var parsedLines: [KianTabbedLine] = []
+        var index = start + 1
+        var foundEnd = false
+
+        while index < upperBound {
+            let raw = lines[index]
+            let endsBlock = raw.hasSuffix("@end")
+            let content = endsBlock ? String(raw.dropLast(4)) : raw
+            if endsBlock && content.isEmpty {
+                throw KianIssue(line: index + 1, message: "@end は独立行にせず、最終データ行の末尾に書いてください。")
+            }
+            if !parsedLines.isEmpty, let changed = try alignmentDeclaration(content, columnCount: declaration.widths.count, line: index + 1) {
+                guard !endsBlock else {
+                    throw KianIssue(line: index + 1, message: "@end は配置宣言ではなく最終データ行の末尾に書いてください。")
+                }
+                currentAlignments = changed
+                index += 1
+                continue
+            }
+            let cells = try tabbedCells(content, columnCount: declaration.widths.count, line: index + 1)
+            parsedLines.append(KianTabbedLine(cells: cells, alignments: currentAlignments, sourceLine: index + 1))
+            index += 1
+            if endsBlock {
+                foundEnd = true
+                break
+            }
+        }
+        guard foundEnd else {
+            throw KianIssue(line: start + 1, message: "@tab の最終データ行を閉じる @end がありません。")
+        }
+        return (KianTabbedBlock(columnWidthsInFontUnits: declaration.widths, lines: parsedLines), index)
+    }
+
+    private func tableCells(_ raw: String, columnCount: Int, line: Int) throws -> [KianTableCell] {
+        var values = raw.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+        guard values.count <= columnCount else {
+            throw KianIssue(line: line, message: "列幅の指定数（\(columnCount)）より内容セルの数（\(values.count)）が多いため、Tabを減らしてください。")
+        }
+        while values.count < columnCount { values.append("") }
+        return values.map { KianTableCell(inlines: parseInline($0)) }
+    }
+
+    private func tabbedCells(_ raw: String, columnCount: Int, line: Int) throws -> [[KianInline]] {
+        var values = raw.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+        guard values.count <= columnCount else {
+            throw KianIssue(line: line, message: "列幅の指定数（\(columnCount)）より内容セルの数（\(values.count)）が多いため、Tabを減らしてください。")
+        }
+        while values.count < columnCount { values.append("") }
+        return values.map(parseInline)
     }
 
     private func isTableRow(_ line: String) -> Bool {
@@ -355,49 +424,74 @@ public struct KianParser {
         return result
     }
 
-    private func parseTable(
-        lines: [String],
-        start: Int,
-        upperBound: Int,
-        forcedColumnWidths: [CGFloat]?,
-        forcedFirstRowAlignment: KianColumnAlignment?
-    ) throws -> (table: KianTable, nextIndex: Int) {
-        let headerStrings = splitTableRow(lines[start])
-        if let forcedColumnWidths, forcedColumnWidths.count != headerStrings.count {
-            throw KianIssue(
-                line: start + 1,
-                message: "列幅の指定数（\(forcedColumnWidths.count)）と表の列数（\(headerStrings.count)）が一致しません。"
-            )
+    private struct StyledLine {
+        var text: String
+        var alignment: KianTextAlignment = .leading
+        var fontSize: CGFloat?
+        var trailingInset: CGFloat = 0
+    }
+
+    private func parseLineStyle(_ raw: String, line: Int) throws -> StyledLine {
+        let expression = try! NSRegularExpression(
+            pattern: #"@(right|center|size)(?:\(([^()]*)\))?$"#
+        )
+        var result = StyledLine(text: raw)
+        var hasAlignment = false
+        var hasSize = false
+
+        while true {
+            let range = NSRange(result.text.startIndex..., in: result.text)
+            guard let match = expression.firstMatch(in: result.text, range: range),
+                  let wholeRange = Range(match.range(at: 0), in: result.text),
+                  let nameRange = Range(match.range(at: 1), in: result.text) else { break }
+            let name = String(result.text[nameRange])
+            let argument: String?
+            if match.range(at: 2).location == NSNotFound {
+                argument = nil
+            } else {
+                argument = Range(match.range(at: 2), in: result.text).map { String(result.text[$0]) }
+            }
+
+            switch name {
+            case "center":
+                guard argument == nil else {
+                    throw KianIssue(line: line, message: "@center には数値を指定できません。")
+                }
+                guard !hasAlignment else {
+                    throw KianIssue(line: line, message: "@right と @center は同じ行に重ねて指定できません。")
+                }
+                result.alignment = .center
+                hasAlignment = true
+            case "right":
+                guard !hasAlignment else {
+                    throw KianIssue(line: line, message: "@right と @center は同じ行に重ねて指定できません。")
+                }
+                if let argument {
+                    guard let value = Double(argument), value >= 0 else {
+                        throw KianIssue(line: line, message: "@right の引数は右側に空けるpt数を0以上の数で指定してください。")
+                    }
+                    result.trailingInset = CGFloat(value)
+                }
+                result.alignment = .trailing
+                hasAlignment = true
+            case "size":
+                guard !hasSize else {
+                    throw KianIssue(line: line, message: "@size は同じ行に1回だけ指定してください。")
+                }
+                guard let argument, let value = Double(argument), value > 0 else {
+                    throw KianIssue(line: line, message: "@size の引数は絶対フォントサイズを正のpt数で指定してください。")
+                }
+                result.fontSize = CGFloat(value)
+                hasSize = true
+            default:
+                break
+            }
+            result.text = String(result.text[..<wholeRange.lowerBound])
         }
-        let separators = splitTableRow(lines[start + 1])
-        let alignments: [KianColumnAlignment] = separators.map {
-            let value = $0.trimmingCharacters(in: .whitespaces)
-            if value.hasPrefix(":") && value.hasSuffix(":") { return .center }
-            if value.hasSuffix(":") { return .trailing }
-            return .leading
-        }
-        var rows: [KianTableRow] = []
-        var index = start + 2
-        while index < upperBound, isTableRow(lines[index]) {
-            var cells = splitTableRow(lines[index]).map { KianTableCell(inlines: parseInline($0)) }
-            while cells.count < headerStrings.count { cells.append(KianTableCell(inlines: [])) }
-            if cells.count > headerStrings.count { cells = Array(cells.prefix(headerStrings.count)) }
-            rows.append(KianTableRow(cells: cells, sourceLine: index + 1))
-            index += 1
-        }
-        let headers = headerStrings.map { KianTableCell(inlines: parseInline($0)) }
-        return (KianTable(
-            headers: headers,
-            alignments: alignments,
-            rows: rows,
-            columnWidthsInFontUnits: forcedColumnWidths,
-            firstRowAlignment: forcedFirstRowAlignment,
-            sourceLine: start + 1
-        ), index)
+        return result
     }
 
     private func parseInline(_ text: String) -> [KianInline] {
-        let text = text.replacingOccurrences(of: "<br>", with: "\n", options: .caseInsensitive)
         var result: [KianInline] = []
         var buffer = ""
         var bold = false
