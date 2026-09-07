@@ -14,17 +14,37 @@ public struct KianParser {
         if lines.first?.trimmingCharacters(in: .whitespaces) == "---" {
             cursor = 1
             var foundEnd = false
+            var settingRange: Range<Int>?
             while cursor < lines.count {
                 if lines[cursor].trimmingCharacters(in: .whitespaces) == "---" {
                     foundEnd = true
+                    settingRange = 1..<cursor
                     cursor += 1
                     break
                 }
-                try parseSetting(lines[cursor], lineNumber: cursor + 1, into: &settings, issues: &issues)
                 cursor += 1
             }
             if !foundEnd {
                 throw KianIssue(line: 1, message: "設定ブロックを閉じる --- がありません。")
+            }
+            if let settingRange {
+                let pairs = try settingRange.compactMap { index in
+                    try settingPair(lines[index], lineNumber: index + 1)
+                }
+                let presetRows = pairs.filter { $0.key == "プリセット" }
+                if let invalid = presetRows.first(where: { $0.value != KianPreset.court.rawValue }) {
+                    throw KianIssue(line: invalid.lineNumber, message: "未知のプリセット「\(invalid.value)」です。")
+                }
+                if !presetRows.isEmpty {
+                    // The court preset is intentionally authoritative. All
+                    // other front matter values are ignored, regardless of order.
+                    settings = KianSettings()
+                } else if !pairs.isEmpty {
+                    settings.preset = nil
+                    for pair in pairs {
+                        try applySetting(pair, into: &settings, issues: &issues)
+                    }
+                }
             }
         }
 
@@ -54,7 +74,7 @@ public struct KianParser {
             let line = lines[index]
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if trimmed.isEmpty {
-                blocks.append(.spacer(13.62))
+                blocks.append(.spacer(0))
                 index += 1
                 continue
             }
@@ -101,10 +121,11 @@ public struct KianParser {
                 case "事件情報":
                     let fields = try parseFields(lines: lines, range: bodyRange)
                     blocks.append(.caseInfo(fields: fields, sourceLine: index + 1))
-                case "証拠説明書", "証拠調べ請求書", "証拠意見書", "附属書類", "当事者目録":
+                case "証拠説明書", "証拠調べ請求書", "証拠調請求書", "証拠意見書", "附属書類", "当事者目録":
                     let kind: KianTableKind = [
                         "証拠説明書": .evidenceList,
                         "証拠調べ請求書": .evidenceRequest,
+                        "証拠調請求書": .evidenceRequest,
                         "証拠意見書": .evidenceOpinion,
                         "附属書類": .attachments,
                         "当事者目録": .parties
@@ -175,21 +196,33 @@ public struct KianParser {
         return blocks
     }
 
-    private func parseSetting(
+    private func settingPair(
         _ line: String,
-        lineNumber: Int,
-        into settings: inout KianSettings,
-        issues: inout [KianIssue]
-    ) throws {
+        lineNumber: Int
+    ) throws -> (key: String, value: String, lineNumber: Int)? {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty else { return nil }
         guard let colon = trimmed.firstIndex(of: ":") ?? trimmed.firstIndex(of: "：") else {
             throw KianIssue(line: lineNumber, message: "設定は「項目: 値」の形式で書いてください。")
         }
         let key = String(trimmed[..<colon]).trimmingCharacters(in: .whitespaces)
         let value = String(trimmed[trimmed.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
+        return (key, value, lineNumber)
+    }
+
+    private func applySetting(
+        _ pair: (key: String, value: String, lineNumber: Int),
+        into settings: inout KianSettings,
+        issues: inout [KianIssue]
+    ) throws {
+        let (key, value, lineNumber) = pair
 
         switch key {
+        case "プリセット":
+            guard value == KianPreset.court.rawValue else {
+                throw KianIssue(line: lineNumber, message: "未知のプリセット「\(value)」です。")
+            }
+            settings = KianSettings()
         case "用紙":
             guard value.uppercased() == "A4" else {
                 throw KianIssue(line: lineNumber, message: "β版で使用できる用紙はA4だけです。")
@@ -322,11 +355,17 @@ public struct KianParser {
     private func inferTableKind(heading: String?, headers: [String]) -> KianTableKind {
         let heading = heading ?? ""
         let header = Set(headers)
-        if heading.contains("証拠説明書") || header.isSuperset(of: ["号証", "標目", "立証趣旨"]) { return .evidenceList }
-        if heading.contains("証拠調べ請求書") || (header.contains("立証趣旨") && (header.contains("証拠の標目") || header.contains("証人"))) { return .evidenceRequest }
-        if heading.contains("証拠意見書") || header.isSuperset(of: ["号証", "対象部分", "意見"]) { return .evidenceOpinion }
-        if heading.contains("附属書類") || header.isSuperset(of: ["書類", "数量"]) { return .attachments }
-        if heading.contains("当事者目録") || header.isSuperset(of: ["種別", "住所", "氏名・名称"]) { return .parties }
+        if heading.contains("証拠説明書") { return .evidenceList }
+        if heading.contains("証拠調べ請求書") || heading.contains("証拠調請求書") { return .evidenceRequest }
+        if heading.contains("証拠意見書") { return .evidenceOpinion }
+        if heading.contains("附属書類") { return .attachments }
+        if heading.contains("当事者目録") { return .parties }
+
+        if header.isSuperset(of: ["号証", "標目", "立証趣旨"]) { return .evidenceList }
+        if header.contains("立証趣旨") && (header.contains("証拠の標目") || header.contains("証人")) { return .evidenceRequest }
+        if header.isSuperset(of: ["号証", "対象部分", "意見"]) { return .evidenceOpinion }
+        if header.isSuperset(of: ["書類", "数量"]) { return .attachments }
+        if header.isSuperset(of: ["種別", "住所", "氏名・名称"]) { return .parties }
         return .generic
     }
 

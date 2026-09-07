@@ -21,8 +21,62 @@ final class ParserTests: XCTestCase {
         XCTAssertEqual(document.settings.fontSize, 13)
         XCTAssertEqual(document.settings.topMargin, 30 * KianSettings.pointsPerMillimeter, accuracy: 0.001)
         XCTAssertFalse(document.settings.showsPageNumbers)
+        XCTAssertNil(document.settings.preset)
         XCTAssertTrue(document.blocks.contains { if case .blockBox = $0 { return true }; return false })
         XCTAssertTrue(document.blocks.contains { if case .pageBreak = $0 { return true }; return false })
+    }
+
+    func testNoFrontMatterUsesCourtPreset() throws {
+        let document = try KianParser().parse("架空の本文")
+        XCTAssertEqual(document.settings.preset, .court)
+        XCTAssertTrue(document.settings.usesStandardCourtGrid)
+    }
+
+    func testEmptyFrontMatterAlsoUsesCourtPreset() throws {
+        let document = try KianParser().parse("---\n\n---\n架空の本文")
+        XCTAssertEqual(document.settings.preset, .court)
+        XCTAssertTrue(document.settings.usesStandardCourtGrid)
+    }
+
+    func testCourtPresetOverridesEveryOtherSettingRegardlessOfOrder() throws {
+        let source = """
+        ---
+        文字サイズ: 99pt
+        上余白: この値も無視される
+        ページ番号: なし
+        プリセット: 裁判所
+        行間: 1pt
+        ---
+        架空の本文
+        """
+        let document = try KianParser().parse(source)
+
+        XCTAssertEqual(document.settings.preset, .court)
+        XCTAssertEqual(document.settings.fontSize, 12)
+        XCTAssertEqual(document.settings.topMargin, 35 * KianSettings.pointsPerMillimeter, accuracy: 0.001)
+        XCTAssertEqual(document.settings.lineSpacing, 13.62, accuracy: 0.001)
+        XCTAssertTrue(document.settings.showsPageNumbers)
+        XCTAssertTrue(document.settings.usesStandardCourtGrid)
+    }
+
+    func testManualCourtValuesDoNotActivateCourtPreset() throws {
+        let source = """
+        ---
+        文字サイズ: 12pt
+        上余白: 35mm
+        下余白: 27mm
+        左余白: 30mm
+        右余白: 22mm
+        字間: 0pt
+        行間: 13.62pt
+        ページ番号: あり
+        禁則処理: 裁判所
+        ---
+        架空の本文
+        """
+        let document = try KianParser().parse(source)
+        XCTAssertNil(document.settings.preset)
+        XCTAssertFalse(document.settings.usesStandardCourtGrid)
     }
 
     func testCustomCharacterAndLineSpacingLeaveCourtGrid() throws {
@@ -76,5 +130,37 @@ final class ParserTests: XCTestCase {
         guard case .table(let table) = document.blocks[1] else { return XCTFail() }
         XCTAssertEqual(table.kind, .evidenceOpinion)
         XCTAssertEqual(table.rows[1].cells[0].plainText, "")
+    }
+
+    func testEvidenceRequestShortNameHeadingAndDirective() throws {
+        let automatic = try KianParser().parse("""
+        # 証拠調請求書
+        | 項目 | 内容 |
+        | --- | --- |
+        | 架空 | 架空 |
+        """)
+        guard case .table(let automaticTable) = automatic.blocks[1] else { return XCTFail() }
+        XCTAssertEqual(automaticTable.kind, .evidenceRequest)
+
+        let explicit = try KianParser().parse("""
+        @証拠調請求書 {
+        | 項目 | 内容 |
+        | --- | --- |
+        | 架空 | 架空 |
+        }
+        """)
+        guard case .table(let explicitTable) = explicit.blocks[0] else { return XCTFail() }
+        XCTAssertEqual(explicitTable.kind, .evidenceRequest)
+    }
+
+    func testExplicitHeadingTakesPriorityOverTableColumnInference() throws {
+        let document = try KianParser().parse("""
+        # 証拠意見書
+        | 号証 | 標目 | 立証趣旨 |
+        | --- | --- | --- |
+        | 甲1 | 架空 | 架空 |
+        """)
+        guard case .table(let table) = document.blocks[1] else { return XCTFail() }
+        XCTAssertEqual(table.kind, .evidenceOpinion)
     }
 }

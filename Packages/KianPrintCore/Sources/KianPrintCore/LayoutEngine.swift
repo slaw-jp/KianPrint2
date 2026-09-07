@@ -39,7 +39,7 @@ private final class LayoutBuilder {
             case .table(let table): layoutTable(table)
             case .caseInfo(let fields, _): layoutCaseInfo(fields)
             case .pageBreak: newPage(force: true)
-            case .spacer(let spacing): addVerticalSpace(settings.fontSize + spacing)
+            case .spacer(let spacing): addVerticalSpace(baseAdvance + spacing)
             }
         }
     }
@@ -92,7 +92,7 @@ private final class LayoutBuilder {
         // A heading uses a larger glyph size, but still occupies one normal
         // document line.  Its effective leading is therefore reduced so that
         // headings do not lower the page capacity from 26 lines to 25.
-        let advance = baseAdvance
+        let advance = settings.usesStandardCourtGrid ? baseAdvance : size + settings.lineSpacing
         if contentBottom - cursorY < advance + baseAdvance { newPage(force: false) }
         let attributed = KianTypography.attributedString(
             from: heading.inlines, settings: settings, fontSize: size, forceBold: false

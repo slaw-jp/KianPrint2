@@ -29,6 +29,10 @@ public enum KianTextAlignment: String, Sendable {
     case trailing
 }
 
+public enum KianPreset: String, Sendable, Equatable {
+    case court = "裁判所"
+}
+
 public struct KianSettings: Sendable, Equatable {
     public static let pointsPerMillimeter = 72.0 / 25.4
     public static let courtColumns = 37
@@ -47,6 +51,9 @@ public struct KianSettings: Sendable, Equatable {
     public var characterSpacing: CGFloat = 0
     public var showsPageNumbers = true
     public var kinsokuMode = "裁判所"
+    /// `court` means the source had no settings, or explicitly selected the
+    /// court preset. `nil` means that a manual front matter block is in use.
+    public var preset: KianPreset? = .court
 
     public init() {}
 
@@ -56,17 +63,7 @@ public struct KianSettings: Sendable, Equatable {
     /// The legacy Court Style values form a fixed 37-column by 26-line grid.
     /// Customized typography or geometry falls back to measured free layout.
     public var usesStandardCourtGrid: Bool {
-        kinsokuMode == "裁判所"
-            && approximatelyEqual(paperWidth, 210 * Self.pointsPerMillimeter)
-            && approximatelyEqual(paperHeight, 297 * Self.pointsPerMillimeter)
-            && approximatelyEqual(topMargin, 35 * Self.pointsPerMillimeter)
-            && approximatelyEqual(bottomMargin, 27 * Self.pointsPerMillimeter)
-            && approximatelyEqual(leftMargin, 30 * Self.pointsPerMillimeter)
-            && approximatelyEqual(rightMargin, 22 * Self.pointsPerMillimeter)
-            && approximatelyEqual(fontSize, 12)
-            && fontName == "Hiragino Mincho ProN W3"
-            && approximatelyEqual(lineSpacing, 13.62)
-            && approximatelyEqual(characterSpacing, 0)
+        preset == .court
     }
 
     public var paragraphContentWidth: CGFloat {
@@ -78,10 +75,6 @@ public struct KianSettings: Sendable, Equatable {
 
     public var lineAdvance: CGFloat {
         usesStandardCourtGrid ? contentHeight / CGFloat(Self.courtLinesPerPage) : fontSize + lineSpacing
-    }
-
-    private func approximatelyEqual(_ lhs: CGFloat, _ rhs: CGFloat) -> Bool {
-        abs(lhs - rhs) < 0.001
     }
 }
 

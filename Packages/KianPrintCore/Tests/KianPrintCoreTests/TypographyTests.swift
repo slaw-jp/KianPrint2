@@ -55,6 +55,29 @@ final class TypographyTests: XCTestCase {
         XCTAssertEqual(textOrigins[1].y - textOrigins[0].y, document.settings.lineAdvance, accuracy: 0.001)
     }
 
+    func testMatchingManualValuesDoNotGiveHeadingCourtLineAdvance() throws {
+        let body = (1...25).map { "本文\($0)" }.joined(separator: "\n")
+        let source = """
+        ---
+        文字サイズ: 12pt
+        上余白: 35mm
+        下余白: 27mm
+        左余白: 30mm
+        右余白: 22mm
+        字間: 0pt
+        行間: 13.62pt
+        禁則処理: 裁判所
+        ---
+        # 見出し
+        \(body)
+        """
+        let document = try KianParser().parse(source)
+        let layout = KianLayoutEngine().layout(document)
+
+        XCTAssertFalse(document.settings.usesStandardCourtGrid)
+        XCTAssertEqual(layout.pages.count, 2)
+    }
+
     func testStandardCourtGridFitsExactly37FullwidthCharacters() throws {
         let document = try KianParser().parse(String(repeating: "あ", count: 74))
         let layout = KianLayoutEngine().layout(document)
