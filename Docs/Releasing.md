@@ -7,7 +7,7 @@ Developmentワークスペース内の既存macOSアプリと同じ原則を使�
 3. `Scripts/check-public.sh` でtracked対象を検査する。
 4. 変更をコミットし、working treeがcleanであることを確認する。
 5. annotated tag（β版では `vX.Y.Z-beta.N`）を作る。
-6. Public GitHub repositoryへbranchとtagをpushする。
+6. GitHub repositoryへbranchとtagをpushする。
 
 Releaseビルド:
 
@@ -18,4 +18,4 @@ xcodebuild -project KianPrint2.xcodeproj -scheme KianPrint2 \
 
 出力は `build/Release/KianPrint2.app`。既存アプリと同様にDevelopment Teamを設定せずad-hoc署名する。公開配布時にGatekeeper警告をなくすには、将来Developer ID署名とnotarizationを別途導入する。
 
-KianPrint2はMITで公開するため、非公開ミラーを一括pushするワークスペース側スクリプトへ無条件に混ぜない。公開リポジトリのremoteを確認して個別にpushする。
+KianPrint2は現在private repositoryとして、他のmacOSアプリと同様にワークスペース側の `publish-releases.sh` でzip、git bundle、branch、tagを公開する。将来GitHub repositoryをpublicへ切り替えた後も、originのvisibilityにかかわらず同じpush手順を使用できる。
