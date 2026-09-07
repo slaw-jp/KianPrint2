@@ -113,7 +113,6 @@ final class ParserTests: XCTestCase {
         guard case .table(let table) = document.blocks.first(where: { if case .table = $0 { return true }; return false }) else {
             return XCTFail("table not parsed")
         }
-        XCTAssertEqual(table.kind, .generic)
         XCTAssertTrue(table.rows[0].cells[1].inlines.contains(where: \.bold))
         XCTAssertTrue(table.rows[0].cells[4].inlines.contains(where: \.italic))
     }
@@ -150,20 +149,8 @@ final class ParserTests: XCTestCase {
         }
         """)
         guard case .table(let borderedTable) = bordered.blocks[0] else { return XCTFail() }
-        XCTAssertEqual(borderedTable.kind, .generic)
         XCTAssertEqual(borderedTable.columnWidthsInCharacters ?? [], [1, 2, 3])
         XCTAssertEqual(borderedTable.firstRowAlignment, .center)
-
-        let borderless = try KianParser().parse("""
-        @罫線なし表(列幅=3,20,6) {
-        | １ | 訴状副本 | １通 |
-        | ---: | --- | ---: |
-        | ２ | 甲号証写し | 各２通 |
-        }
-        """)
-        guard case .table(let borderlessTable) = borderless.blocks[0] else { return XCTFail() }
-        XCTAssertEqual(borderlessTable.kind, .borderless)
-        XCTAssertEqual(borderlessTable.columnWidthsInCharacters ?? [], [3, 20, 6])
     }
 
     func testColumnWidthCountMustMatchTable() {
@@ -188,18 +175,34 @@ final class ParserTests: XCTestCase {
         事件名: 架空事件
         }
         """))
+        XCTAssertThrowsError(try KianParser().parse("""
+        @罫線なし表(列幅=3,20,6) {
+        | １ | 訴状副本 | １通 |
+        | --- | --- | --- |
+        }
+        """))
     }
 
-    func testTabStopsParseAsTwelvePointCharacterPositions() throws {
+    func testTabIntervalsAcceptAnyCountAndPreserveTabFields() throws {
         let document = try KianParser().parse("""
-        @タブ(11,21) {
+        @タブ(1,2,3,4,5,6,7,8,9,10,11,12) {
         \t原　告\t株式会社架空商事
-        \t上記代表者代表取締役　架　空　花　子
+        \t上記代表者代表取締役\t架　空　花　子
         }
         """)
         guard case .tabbed(let block) = document.blocks[0] else { return XCTFail() }
-        XCTAssertEqual(block.tabStopsInCharacters, [11, 21])
+        XCTAssertEqual(block.tabIntervalsInCharacters, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
         XCTAssertEqual(block.lines[0].cells.count, 3)
-        XCTAssertEqual(block.lines[1].cells.count, 2)
+        XCTAssertEqual(block.lines[1].cells.count, 3)
+    }
+
+    func testTabbedFieldsPreserveIntentionalFullwidthSpaces() throws {
+        let document = try KianParser().parse("""
+        @タブ(1,7) {
+        　訴訟物の価額\t１００万円
+        }
+        """)
+        guard case .tabbed(let block) = document.blocks[0] else { return XCTFail() }
+        XCTAssertEqual(block.lines[0].cells[0].map(\.text).joined(), "　訴訟物の価額")
     }
 }

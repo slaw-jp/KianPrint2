@@ -218,14 +218,14 @@ final class TypographyTests: XCTestCase {
         let header = try XCTUnwrap(texts.first { $0.text.string == "標目" })
         let body = try XCTUnwrap(texts.first { $0.text.string == "契約書" })
         XCTAssertGreaterThan(header.origin.x, document.settings.leftMargin)
-        XCTAssertEqual(body.origin.x, document.settings.leftMargin, accuracy: 0.001)
+        XCTAssertEqual(body.origin.x, document.settings.leftMargin + 3, accuracy: 0.001)
     }
 
-    func testTabStopsPlaceAndSpanPartyListText() throws {
+    func testTabIntervalsAreRelativeAndPlacePartyListFields() throws {
         let document = try KianParser().parse("""
-        @タブ(11,21) {
+        @タブ(10,11) {
         \t原　告\t株式会社架空商事
-        \t上記代表者代表取締役　架　空　花　子
+        \t上記代表者代表取締役\t架　空　花　子
         }
         """)
         let layout = KianLayoutEngine().layout(document)
@@ -235,33 +235,46 @@ final class TypographyTests: XCTestCase {
         }
         let role = try XCTUnwrap(texts.first { $0.text.string == "原　告" })
         let company = try XCTUnwrap(texts.first { $0.text.string == "株式会社架空商事" })
-        let representative = try XCTUnwrap(texts.first { $0.text.string.hasPrefix("上記代表者") })
-        XCTAssertEqual(role.origin.x, document.settings.leftMargin + 11 * 12, accuracy: 0.001)
+        let representativeRole = try XCTUnwrap(texts.first { $0.text.string == "上記代表者代表取締役" })
+        let representativeName = try XCTUnwrap(texts.first { $0.text.string == "架　空　花　子" })
+        XCTAssertEqual(role.origin.x, document.settings.leftMargin + 10 * 12, accuracy: 0.001)
         XCTAssertEqual(company.origin.x, document.settings.leftMargin + 21 * 12, accuracy: 0.001)
-        XCTAssertEqual(representative.origin.x, role.origin.x, accuracy: 0.001)
-        XCTAssertEqual(representative.text.string, "上記代表者代表取締役　架　空　花　子")
+        XCTAssertEqual(representativeRole.origin.x, role.origin.x, accuracy: 0.001)
+        XCTAssertEqual(representativeName.origin.x, company.origin.x, accuracy: 0.001)
     }
 
-    func testBorderlessTableHasNoRulesAndUsesNormalLineAdvance() throws {
+    func testTabAdvancesToNextStopAfterCurrentTextPosition() throws {
         let document = try KianParser().parse("""
-        @罫線なし表(列幅=3,20,6) {
-        | １ | 訴状副本 | １通 |
-        | ---: | --- | ---: |
-        | ２ | 甲号証写し | 各２通 |
+        @タブ(1,7) {
+        　訴訟物の価額\t１００万円
         }
         """)
         let layout = KianLayoutEngine().layout(document)
-        let lineCommands = layout.pages[0].commands.filter { command in
-            if case .line = command { return true }
-            return false
+        let texts = layout.pages[0].commands.compactMap { command -> KianPlacedText? in
+            guard case .text(let placed) = command else { return nil }
+            return placed
         }
-        XCTAssertTrue(lineCommands.isEmpty)
-        let numberOrigins = layout.pages[0].commands.compactMap { command -> CGPoint? in
-            guard case .text(let placed) = command,
-                  ["１", "２"].contains(placed.text.string) else { return nil }
-            return placed.origin
+        let label = try XCTUnwrap(texts.first { $0.text.string == "　訴訟物の価額" })
+        let value = try XCTUnwrap(texts.first { $0.text.string == "１００万円" })
+        XCTAssertEqual(label.origin.x, document.settings.leftMargin, accuracy: 0.001)
+        XCTAssertEqual(value.origin.x, document.settings.leftMargin + 8 * 12, accuracy: 0.001)
+    }
+
+    func testTabIntervalsCanDefineMoreThanTwoStops() throws {
+        let document = try KianParser().parse("""
+        @タブ(2,3,4,5) {
+        一\t二\t三\t四\t五
         }
-        XCTAssertEqual(numberOrigins.count, 2)
-        XCTAssertEqual(numberOrigins[1].y - numberOrigins[0].y, document.settings.lineAdvance, accuracy: 0.001)
+        """)
+        let layout = KianLayoutEngine().layout(document)
+        let origins = layout.pages[0].commands.compactMap { command -> CGFloat? in
+            guard case .text(let placed) = command else { return nil }
+            return placed.origin.x
+        }
+        XCTAssertEqual(origins.count, 5)
+        let expectedOffsets: [CGFloat] = [0, 24, 60, 108, 168]
+        for (origin, expectedOffset) in zip(origins, expectedOffsets) {
+            XCTAssertEqual(origin - document.settings.leftMargin, expectedOffset, accuracy: 0.001)
+        }
     }
 }

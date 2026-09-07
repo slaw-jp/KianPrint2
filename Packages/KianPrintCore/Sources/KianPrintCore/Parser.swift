@@ -53,7 +53,6 @@ public struct KianParser {
             lines: lines,
             range: cursor..<lines.count,
             recognizer: &recognizer,
-            forcedTableKind: nil,
             forcedColumnWidths: nil,
             forcedFirstRowAlignment: nil
         )
@@ -64,7 +63,6 @@ public struct KianParser {
         lines: [String],
         range: Range<Int>,
         recognizer: inout LegalNumberingRecognizer,
-        forcedTableKind: KianTableKind?,
         forcedColumnWidths: [CGFloat]?,
         forcedFirstRowAlignment: KianColumnAlignment?
     ) throws -> [KianBlock] {
@@ -127,8 +125,7 @@ public struct KianParser {
                         paragraphs: paragraphs
                     )
                     blocks.append(.blockBox(box))
-                case "表", "罫線なし表":
-                    let kind: KianTableKind = directive.name == "罫線なし表" ? .borderless : .generic
+                case "表":
                     let options = try parseTableOptions(
                         directive.argument,
                         directiveName: directive.name,
@@ -138,23 +135,22 @@ public struct KianParser {
                         lines: lines,
                         range: bodyRange,
                         recognizer: &recognizer,
-                        forcedTableKind: kind,
                         forcedColumnWidths: options.columnWidths,
                         forcedFirstRowAlignment: options.firstRowAlignment
                     )
                     blocks.append(contentsOf: inner)
                 case "タブ":
-                    let tabStops = try parseTabStops(directive.argument, line: index + 1)
+                    let tabIntervals = try parseTabIntervals(directive.argument, line: index + 1)
                     let tabbedLines = try bodyRange.map { bodyIndex in
                         let cells = lines[bodyIndex].split(separator: "\t", omittingEmptySubsequences: false).map {
-                            parseInline($0.trimmingCharacters(in: .whitespaces))
+                            parseInline(String($0))
                         }
-                        guard cells.count <= tabStops.count + 1 else {
-                            throw KianIssue(line: bodyIndex + 1, message: "指定したタブ位置より多くのTab文字があります。")
+                        guard cells.count <= tabIntervals.count + 1 else {
+                            throw KianIssue(line: bodyIndex + 1, message: "指定したタブ間隔の個数より多くのTab文字があります。")
                         }
                         return KianTabbedLine(cells: cells, sourceLine: bodyIndex + 1)
                     }
-                    blocks.append(.tabbed(KianTabbedBlock(tabStopsInCharacters: tabStops, lines: tabbedLines)))
+                    blocks.append(.tabbed(KianTabbedBlock(tabIntervalsInCharacters: tabIntervals, lines: tabbedLines)))
                 default:
                     throw KianIssue(line: index + 1, message: "未知のDirective @\(directive.name) です。")
                 }
@@ -179,7 +175,6 @@ public struct KianParser {
                     lines: lines,
                     start: index,
                     upperBound: range.upperBound,
-                    forcedKind: forcedTableKind,
                     forcedColumnWidths: forcedColumnWidths,
                     forcedFirstRowAlignment: forcedFirstRowAlignment
                 )
@@ -336,15 +331,11 @@ public struct KianParser {
         return result
     }
 
-    private func parseTabStops(_ argument: String?, line: Int) throws -> [CGFloat] {
+    private func parseTabIntervals(_ argument: String?, line: Int) throws -> [CGFloat] {
         guard let argument else {
-            throw KianIssue(line: line, message: "@タブには「@タブ(11,21)」のようにタブ位置を指定してください。")
+            throw KianIssue(line: line, message: "@タブには「@タブ(4,6)」のように前のタブ位置からの間隔を指定してください。")
         }
-        let stops = try parsePositiveNumbers(argument, line: line, description: "タブ位置")
-        guard zip(stops, stops.dropFirst()).allSatisfy({ pair in pair.0 < pair.1 }) else {
-            throw KianIssue(line: line, message: "タブ位置は左から小さい順に指定してください。")
-        }
-        return stops
+        return try parsePositiveNumbers(argument, line: line, description: "タブ間隔")
     }
 
     private func parsePositiveNumbers(
@@ -409,7 +400,6 @@ public struct KianParser {
         lines: [String],
         start: Int,
         upperBound: Int,
-        forcedKind: KianTableKind?,
         forcedColumnWidths: [CGFloat]?,
         forcedFirstRowAlignment: KianColumnAlignment?
     ) throws -> (table: KianTable, nextIndex: Int) {
@@ -437,12 +427,10 @@ public struct KianParser {
             index += 1
         }
         let headers = headerStrings.map { KianTableCell(inlines: parseInline($0)) }
-        let kind = forcedKind ?? .generic
         return (KianTable(
             headers: headers,
             alignments: alignments,
             rows: rows,
-            kind: kind,
             columnWidthsInCharacters: forcedColumnWidths,
             firstRowAlignment: forcedFirstRowAlignment,
             sourceLine: start + 1

@@ -137,10 +137,7 @@ private final class LayoutBuilder {
     }
 
     private func layoutTable(_ table: KianTable) {
-        switch table.kind {
-        case .borderless: layoutBorderlessTable(table)
-        case .generic: layoutGridTable(table)
-        }
+        layoutGridTable(table)
     }
 
     private func layoutGridTable(_ table: KianTable) {
@@ -181,14 +178,15 @@ private final class LayoutBuilder {
             let cell = index < cells.count ? cells[index] : KianTableCell(inlines: [])
             let attributed = KianTypography.attributedString(from: cell.inlines, settings: settings, fontSize: settings.fontSize - 1, forceBold: bold)
             let verticalPadding: CGFloat = 4
-            let lines = breaker.breakLines(attributed, width: max(1, widths[index]))
+            let horizontalPadding: CGFloat = 3
+            let lines = breaker.breakLines(attributed, width: max(1, widths[index] - horizontalPadding * 2))
             let alignment = index < alignments.count ? alignments[index] : .leading
             for (offset, line) in lines.enumerated() {
                 let lineX: CGFloat
                 switch alignment {
-                case .leading: lineX = x
+                case .leading: lineX = x + horizontalPadding
                 case .center: lineX = x + (widths[index] - line.width) / 2
-                case .trailing: lineX = x + widths[index] - line.width
+                case .trailing: lineX = x + widths[index] - horizontalPadding - line.width
                 }
                 append(line, x: lineX, y: top + verticalPadding + CGFloat(offset) * (settings.fontSize + 4))
             }
@@ -200,10 +198,11 @@ private final class LayoutBuilder {
     }
 
     private func tableRowHeight(cells: [KianTableCell], widths: [CGFloat], bold: Bool) -> CGFloat {
+        let horizontalPadding: CGFloat = 3
         let heights = widths.indices.map { index -> CGFloat in
             let cell = index < cells.count ? cells[index] : KianTableCell(inlines: [])
             let attributed = KianTypography.attributedString(from: cell.inlines, settings: settings, fontSize: settings.fontSize - 1, forceBold: bold)
-            let count = breaker.breakLines(attributed, width: max(1, widths[index])).count
+            let count = breaker.breakLines(attributed, width: max(1, widths[index] - horizontalPadding * 2)).count
             return CGFloat(max(1, count)) * (settings.fontSize + 4) + 8
         }
         return heights.max() ?? baseAdvance
@@ -229,62 +228,32 @@ private final class LayoutBuilder {
         return preferred.map { $0 / total * settings.contentWidth }
     }
 
-    private func layoutBorderlessTable(_ table: KianTable) {
-        guard !table.headers.isEmpty else { return }
-        let gap: CGFloat = 12
-        let gapCount = CGFloat(max(0, table.headers.count - 1))
-        let usableWidth = max(1, settings.contentWidth - gap * gapCount)
-        let widths: [CGFloat]
-        if let specifiedWidths = table.columnWidthsInCharacters,
-           specifiedWidths.count == table.headers.count {
-            widths = specifiedWidths.map { $0 * 12 }
-        } else {
-            widths = Array(repeating: usableWidth / CGFloat(table.headers.count), count: table.headers.count)
-        }
-
-        for (rowIndex, cells) in ([table.headers] + table.rows.map(\.cells)).enumerated() {
-            let height = borderlessRowHeight(cells: cells, widths: widths)
-            ensureSpace(height)
-            var x = settings.leftMargin
-            for index in widths.indices {
-                let cell = index < cells.count ? cells[index] : KianTableCell(inlines: [])
-                let attributed = KianTypography.attributedString(from: cell.inlines, settings: settings)
-                let lines = breaker.breakLines(attributed, width: widths[index])
-                let alignment = rowIndex == 0
-                    ? (table.firstRowAlignment ?? (index < table.alignments.count ? table.alignments[index] : .leading))
-                    : (index < table.alignments.count ? table.alignments[index] : .leading)
-                for (offset, line) in lines.enumerated() {
-                    let lineX: CGFloat
-                    switch alignment {
-                    case .leading: lineX = x
-                    case .center: lineX = x + (widths[index] - line.width) / 2
-                    case .trailing: lineX = x + widths[index] - line.width
-                    }
-                    append(line, x: lineX, y: cursorY + CGFloat(offset) * baseAdvance)
-                }
-                x += widths[index] + gap
-            }
-            cursorY += height
-        }
-    }
-
-    private func borderlessRowHeight(cells: [KianTableCell], widths: [CGFloat]) -> CGFloat {
-        let lineCounts = widths.indices.map { index -> Int in
-            let cell = index < cells.count ? cells[index] : KianTableCell(inlines: [])
-            let attributed = KianTypography.attributedString(from: cell.inlines, settings: settings)
-            return breaker.breakLines(attributed, width: widths[index]).count
-        }
-        return CGFloat(max(1, lineCounts.max() ?? 1)) * baseAdvance
-    }
-
     private func layoutTabbedBlock(_ block: KianTabbedBlock) {
-        let tabStops = block.tabStopsInCharacters.map { $0 * 12 }
+        var cumulativeOffset: CGFloat = 0
+        let tabStops = block.tabIntervalsInCharacters.map { interval -> CGFloat in
+            cumulativeOffset += interval * 12
+            return cumulativeOffset
+        }
         for row in block.lines {
+            var cellOffsets: [CGFloat] = [0]
+            var nextStopIndex = 0
+            for cellIndex in 0..<max(0, row.cells.count - 1) {
+                let attributed = KianTypography.attributedString(from: row.cells[cellIndex], settings: settings)
+                let textEnd = cellOffsets[cellIndex] + KianTypography.width(of: attributed)
+                while nextStopIndex < tabStops.count, tabStops[nextStopIndex] <= textEnd + 0.001 {
+                    nextStopIndex += 1
+                }
+                if nextStopIndex < tabStops.count {
+                    cellOffsets.append(tabStops[nextStopIndex])
+                    nextStopIndex += 1
+                } else {
+                    cellOffsets.append(settings.contentWidth)
+                }
+            }
+
             let measuredCells = row.cells.enumerated().map { index, inlines -> [KianMeasuredLine] in
-                let xOffset = index == 0 ? 0 : (index - 1 < tabStops.count ? tabStops[index - 1] : settings.contentWidth)
-                let nextOffset = index == row.cells.count - 1
-                    ? settings.contentWidth
-                    : (index < tabStops.count ? tabStops[index] : settings.contentWidth)
+                let xOffset = cellOffsets[index]
+                let nextOffset = index == row.cells.count - 1 ? settings.contentWidth : cellOffsets[index + 1]
                 let width = max(1, nextOffset - xOffset)
                 let attributed = KianTypography.attributedString(from: inlines, settings: settings)
                 return breaker.breakLines(attributed, width: width)
@@ -292,7 +261,7 @@ private final class LayoutBuilder {
             let rowHeight = CGFloat(max(1, measuredCells.map(\.count).max() ?? 1)) * baseAdvance
             ensureSpace(rowHeight)
             for (index, lines) in measuredCells.enumerated() {
-                let xOffset = index == 0 ? 0 : (index - 1 < tabStops.count ? tabStops[index - 1] : settings.contentWidth)
+                let xOffset = cellOffsets[index]
                 for (lineIndex, line) in lines.enumerated() {
                     append(
                         line,

@@ -171,16 +171,10 @@ public struct KianTableRow: Sendable, Equatable {
     }
 }
 
-public enum KianTableKind: String, Sendable, Equatable {
-    case generic
-    case borderless
-}
-
 public struct KianTable: Sendable, Equatable {
     public var headers: [KianTableCell]
     public var alignments: [KianColumnAlignment]
     public var rows: [KianTableRow]
-    public var kind: KianTableKind
     /// Absolute column widths, measured in 12pt fullwidth-character units.
     public var columnWidthsInCharacters: [CGFloat]?
     public var firstRowAlignment: KianColumnAlignment?
@@ -190,7 +184,6 @@ public struct KianTable: Sendable, Equatable {
         headers: [KianTableCell],
         alignments: [KianColumnAlignment],
         rows: [KianTableRow],
-        kind: KianTableKind = .generic,
         columnWidthsInCharacters: [CGFloat]? = nil,
         firstRowAlignment: KianColumnAlignment? = nil,
         sourceLine: Int
@@ -198,7 +191,6 @@ public struct KianTable: Sendable, Equatable {
         self.headers = headers
         self.alignments = alignments
         self.rows = rows
-        self.kind = kind
         self.columnWidthsInCharacters = columnWidthsInCharacters
         self.firstRowAlignment = firstRowAlignment
         self.sourceLine = sourceLine
@@ -216,12 +208,12 @@ public struct KianTabbedLine: Sendable, Equatable {
 }
 
 public struct KianTabbedBlock: Sendable, Equatable {
-    /// Tab stops measured from the left margin in 12pt fullwidth-character units.
-    public var tabStopsInCharacters: [CGFloat]
+    /// Distances from the preceding tab stop, measured in 12pt fullwidth-character units.
+    public var tabIntervalsInCharacters: [CGFloat]
     public var lines: [KianTabbedLine]
 
-    public init(tabStopsInCharacters: [CGFloat], lines: [KianTabbedLine]) {
-        self.tabStopsInCharacters = tabStopsInCharacters
+    public init(tabIntervalsInCharacters: [CGFloat], lines: [KianTabbedLine]) {
+        self.tabIntervalsInCharacters = tabIntervalsInCharacters
         self.lines = lines
     }
 }
