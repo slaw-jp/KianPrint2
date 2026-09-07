@@ -160,9 +160,9 @@ final class TypographyTests: XCTestCase {
         XCTAssertEqual(sizes, [22.5, 20, 17.5, 15])
     }
 
-    func testSealPlacementKeepsThirtyMillimetersClearAtRight() throws {
+    func testNumericRightInsetKeepsThreeTwelvePointCharactersClear() throws {
         let document = try KianParser().parse("""
-        @右揃え(印) {
+        @右揃え(3) {
         原告訴訟代理人弁護士　架　空　太　郎
         }
         """)
@@ -170,13 +170,13 @@ final class TypographyTests: XCTestCase {
         guard case .text(let signature) = layout.pages[0].commands[0] else { return XCTFail() }
         let expectedRight = document.settings.paperWidth
             - document.settings.rightMargin
-            - 30 * KianSettings.pointsPerMillimeter
+            - 36
         XCTAssertEqual(signature.origin.x + signature.width, expectedRight, accuracy: 0.001)
     }
 
-    func testEvidenceListUsesSpecifiedColumnProportions() throws {
+    func testSpecifiedColumnWidthsAreAbsoluteAndTableStaysLeftAligned() throws {
         let document = try KianParser().parse("""
-        @証拠説明書(列幅=10,29,5,15,15,26) {
+        @表(列幅=4,8,3,6,6,10; 先頭行=中央) {
         | 符号番号 | 標目 |  | 作成年月日 | 作成者 | 立証趣旨 |
         | --- | --- | --- | --- | --- | --- |
         | 甲１ | 契約書 | 原本 | 令和８年 | 原告 | 契約の成立 |
@@ -191,19 +191,20 @@ final class TypographyTests: XCTestCase {
             return from.x
         }
         XCTAssertEqual(verticalXs.count, 7)
-        let fractions: [CGFloat] = [0.10, 0.29, 0.05, 0.15, 0.15, 0.26]
-        for index in fractions.indices {
+        let widths: [CGFloat] = [4, 8, 3, 6, 6, 10]
+        for index in widths.indices {
             XCTAssertEqual(
                 verticalXs[index + 1] - verticalXs[index],
-                document.settings.contentWidth * fractions[index],
+                widths[index] * 12,
                 accuracy: 0.001
             )
         }
+        XCTAssertLessThan(verticalXs.last!, document.settings.leftMargin + document.settings.contentWidth)
     }
 
-    func testEvidenceHeaderIsCenteredWhileBodyUsesColumnAlignment() throws {
+    func testFirstRowCanBeCenteredWhileBodyUsesColumnAlignment() throws {
         let document = try KianParser().parse("""
-        @証拠説明書(列幅=1,1) {
+        @表(列幅=8,12; 先頭行=中央) {
         | 標目 | 作成者 |
         | --- | --- |
         | 契約書 | 原告及び被告 |
@@ -216,8 +217,29 @@ final class TypographyTests: XCTestCase {
         }
         let header = try XCTUnwrap(texts.first { $0.text.string == "標目" })
         let body = try XCTUnwrap(texts.first { $0.text.string == "契約書" })
-        XCTAssertGreaterThan(header.origin.x, document.settings.leftMargin + 4)
-        XCTAssertEqual(body.origin.x, document.settings.leftMargin + 4, accuracy: 0.001)
+        XCTAssertGreaterThan(header.origin.x, document.settings.leftMargin)
+        XCTAssertEqual(body.origin.x, document.settings.leftMargin, accuracy: 0.001)
+    }
+
+    func testTabStopsPlaceAndSpanPartyListText() throws {
+        let document = try KianParser().parse("""
+        @タブ(11,21) {
+        \t原　告\t株式会社架空商事
+        \t上記代表者代表取締役　架　空　花　子
+        }
+        """)
+        let layout = KianLayoutEngine().layout(document)
+        let texts = layout.pages[0].commands.compactMap { command -> KianPlacedText? in
+            guard case .text(let placed) = command else { return nil }
+            return placed
+        }
+        let role = try XCTUnwrap(texts.first { $0.text.string == "原　告" })
+        let company = try XCTUnwrap(texts.first { $0.text.string == "株式会社架空商事" })
+        let representative = try XCTUnwrap(texts.first { $0.text.string.hasPrefix("上記代表者") })
+        XCTAssertEqual(role.origin.x, document.settings.leftMargin + 11 * 12, accuracy: 0.001)
+        XCTAssertEqual(company.origin.x, document.settings.leftMargin + 21 * 12, accuracy: 0.001)
+        XCTAssertEqual(representative.origin.x, role.origin.x, accuracy: 0.001)
+        XCTAssertEqual(representative.text.string, "上記代表者代表取締役　架　空　花　子")
     }
 
     func testBorderlessTableHasNoRulesAndUsesNormalLineAdvance() throws {

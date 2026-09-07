@@ -174,7 +174,6 @@ public struct KianTableRow: Sendable, Equatable {
 public enum KianTableKind: String, Sendable, Equatable {
     case generic
     case borderless
-    case evidenceList
 }
 
 public struct KianTable: Sendable, Equatable {
@@ -182,8 +181,9 @@ public struct KianTable: Sendable, Equatable {
     public var alignments: [KianColumnAlignment]
     public var rows: [KianTableRow]
     public var kind: KianTableKind
-    /// Relative column widths. Values are normalized when laid out.
-    public var columnWidthWeights: [CGFloat]?
+    /// Absolute column widths, measured in 12pt fullwidth-character units.
+    public var columnWidthsInCharacters: [CGFloat]?
+    public var firstRowAlignment: KianColumnAlignment?
     public var sourceLine: Int
 
     public init(
@@ -191,24 +191,38 @@ public struct KianTable: Sendable, Equatable {
         alignments: [KianColumnAlignment],
         rows: [KianTableRow],
         kind: KianTableKind = .generic,
-        columnWidthWeights: [CGFloat]? = nil,
+        columnWidthsInCharacters: [CGFloat]? = nil,
+        firstRowAlignment: KianColumnAlignment? = nil,
         sourceLine: Int
     ) {
         self.headers = headers
         self.alignments = alignments
         self.rows = rows
         self.kind = kind
-        self.columnWidthWeights = columnWidthWeights
+        self.columnWidthsInCharacters = columnWidthsInCharacters
+        self.firstRowAlignment = firstRowAlignment
         self.sourceLine = sourceLine
     }
 }
 
-public struct KianField: Sendable, Equatable {
-    public var label: String
-    public var value: [KianInline]
-    public init(label: String, value: [KianInline]) {
-        self.label = label
-        self.value = value
+public struct KianTabbedLine: Sendable, Equatable {
+    public var cells: [[KianInline]]
+    public var sourceLine: Int
+
+    public init(cells: [[KianInline]], sourceLine: Int) {
+        self.cells = cells
+        self.sourceLine = sourceLine
+    }
+}
+
+public struct KianTabbedBlock: Sendable, Equatable {
+    /// Tab stops measured from the left margin in 12pt fullwidth-character units.
+    public var tabStopsInCharacters: [CGFloat]
+    public var lines: [KianTabbedLine]
+
+    public init(tabStopsInCharacters: [CGFloat], lines: [KianTabbedLine]) {
+        self.tabStopsInCharacters = tabStopsInCharacters
+        self.lines = lines
     }
 }
 
@@ -218,7 +232,7 @@ public enum KianBlock: Sendable, Equatable {
     case quote(KianParagraph)
     case blockBox(KianBlockBox)
     case table(KianTable)
-    case caseInfo(fields: [KianField], sourceLine: Int)
+    case tabbed(KianTabbedBlock)
     case pageBreak
     case spacer(CGFloat)
 }

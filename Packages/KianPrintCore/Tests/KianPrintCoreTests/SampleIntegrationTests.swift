@@ -19,7 +19,8 @@ final class SampleIntegrationTests: XCTestCase {
             let source = try String(contentsOf: url, encoding: .utf8)
             let digitsExcludedFromProseCheck = source
                 .replacingOccurrences(of: #"\([0-9]+\)"#, with: "", options: .regularExpression)
-                .replacingOccurrences(of: #"列幅=[0-9,.]+"#, with: "", options: .regularExpression)
+                .replacingOccurrences(of: #"列幅=[0-9,. ]+"#, with: "", options: .regularExpression)
+                .replacingOccurrences(of: #"@タブ\([0-9,. ]+\)"#, with: "", options: .regularExpression)
                 .replacingOccurrences(of: #"R[0-9.]+"#, with: "", options: .regularExpression)
             if url.lastPathComponent == "証拠説明書.txt" {
                 XCTAssertTrue(source.contains("R8.4.1"))

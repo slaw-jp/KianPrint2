@@ -102,7 +102,7 @@ final class ParserTests: XCTestCase {
         }
     }
 
-    func testTableSemanticsAndInlineMarkup() throws {
+    func testGenericTableAndInlineMarkup() throws {
         let source = """
         # 証拠説明書
         | 号証 | 標目 | 作成年月日 | 作成者 | 立証趣旨 | 備考 |
@@ -113,60 +113,37 @@ final class ParserTests: XCTestCase {
         guard case .table(let table) = document.blocks.first(where: { if case .table = $0 { return true }; return false }) else {
             return XCTFail("table not parsed")
         }
-        XCTAssertEqual(table.kind, .evidenceList)
+        XCTAssertEqual(table.kind, .generic)
         XCTAssertTrue(table.rows[0].cells[1].inlines.contains(where: \.bold))
         XCTAssertTrue(table.rows[0].cells[4].inlines.contains(where: \.italic))
     }
 
-    func testEvidenceDocumentTitleAppliesAfterFirstPageMetadata() throws {
+    func testNumericRightInsetUsesTwelvePointCharacterUnits() throws {
         let document = try KianParser().parse("""
-        # 証拠説明書
-        @右揃え {
-        令和８年９月７日
-        }
-        架空地方裁判所民事部　御中
-        @右配置(印) {
-        被告訴訟代理人弁護士　見　本　次　郎
-        }
-        | 項目 | 内容 |
-        | --- | --- |
-        | 架空 | 架空 |
-        """)
-        guard case .table(let table) = document.blocks.last else { return XCTFail() }
-        XCTAssertEqual(table.kind, .evidenceList)
-    }
-
-    func testSealArgumentReservesThirtyMillimeters() throws {
-        let document = try KianParser().parse("""
-        @右配置(印) {
+        @右配置(3) {
         原告訴訟代理人弁護士　架　空　太　郎
         }
         """)
         guard case .blockBox(let box) = document.blocks[0] else { return XCTFail() }
-        XCTAssertEqual(box.trailingInset, 30 * KianSettings.pointsPerMillimeter, accuracy: 0.001)
+        XCTAssertEqual(box.trailingInset, 36, accuracy: 0.001)
     }
 
-    func testFormerOccupationSealArgumentIsRejected() {
+    func testFormerRightInsetArgumentsAreRejected() {
         XCTAssertThrowsError(try KianParser().parse("""
-        @右配置(職印) {
+        @右配置(印) {
+        原告訴訟代理人弁護士　架　空　太　郎
+        }
+        """))
+        XCTAssertThrowsError(try KianParser().parse("""
+        @右揃え(30pt) {
         原告訴訟代理人弁護士　架　空　太　郎
         }
         """))
     }
 
-    func testRightAlignmentAcceptsExactPointInset() throws {
-        let document = try KianParser().parse("""
-        @右揃え(30pt) {
-        原告訴訟代理人弁護士　架　空　太　郎
-        }
-        """)
-        guard case .blockBox(let box) = document.blocks[0] else { return XCTFail() }
-        XCTAssertEqual(box.trailingInset, 30, accuracy: 0.001)
-    }
-
     func testTableDirectivesAcceptVariableColumnWidths() throws {
         let bordered = try KianParser().parse("""
-        @表(列幅=1,2,3) {
+        @表(列幅=1,2,3; 先頭行=中央) {
         | 左 | 中 | 右 |
         | --- | :---: | ---: |
         | あ | い | う |
@@ -174,7 +151,8 @@ final class ParserTests: XCTestCase {
         """)
         guard case .table(let borderedTable) = bordered.blocks[0] else { return XCTFail() }
         XCTAssertEqual(borderedTable.kind, .generic)
-        XCTAssertEqual(borderedTable.columnWidthWeights ?? [], [1, 2, 3])
+        XCTAssertEqual(borderedTable.columnWidthsInCharacters ?? [], [1, 2, 3])
+        XCTAssertEqual(borderedTable.firstRowAlignment, .center)
 
         let borderless = try KianParser().parse("""
         @罫線なし表(列幅=3,20,6) {
@@ -185,7 +163,7 @@ final class ParserTests: XCTestCase {
         """)
         guard case .table(let borderlessTable) = borderless.blocks[0] else { return XCTFail() }
         XCTAssertEqual(borderlessTable.kind, .borderless)
-        XCTAssertEqual(borderlessTable.columnWidthWeights ?? [], [3, 20, 6])
+        XCTAssertEqual(borderlessTable.columnWidthsInCharacters ?? [], [3, 20, 6])
     }
 
     func testColumnWidthCountMustMatchTable() {
@@ -198,13 +176,30 @@ final class ParserTests: XCTestCase {
         """))
     }
 
-    func testEvidenceListRecognitionAcceptsFiledDocumentHeaders() throws {
-        let document = try KianParser().parse("""
-        | 符号<br>番号 | 標目 |  | 作成年月<br>日 | 作成者 | 立証趣旨 |
+    func testLegalDocumentSpecificDirectivesWereRemoved() {
+        XCTAssertThrowsError(try KianParser().parse("""
+        @証拠説明書(列幅=4,8,3,6,6,10) {
+        | 符号番号 | 標目 |  | 作成年月日 | 作成者 | 立証趣旨 |
         | --- | --- | --- | --- | --- | --- |
-        | 甲１ | 契約書 | 原本 | 令和８年 | 原告 | 契約の成立 |
+        }
+        """))
+        XCTAssertThrowsError(try KianParser().parse("""
+        @事件情報 {
+        事件名: 架空事件
+        }
+        """))
+    }
+
+    func testTabStopsParseAsTwelvePointCharacterPositions() throws {
+        let document = try KianParser().parse("""
+        @タブ(11,21) {
+        \t原　告\t株式会社架空商事
+        \t上記代表者代表取締役　架　空　花　子
+        }
         """)
-        guard case .table(let table) = document.blocks[0] else { return XCTFail() }
-        XCTAssertEqual(table.kind, .evidenceList)
+        guard case .tabbed(let block) = document.blocks[0] else { return XCTFail() }
+        XCTAssertEqual(block.tabStopsInCharacters, [11, 21])
+        XCTAssertEqual(block.lines[0].cells.count, 3)
+        XCTAssertEqual(block.lines[1].cells.count, 2)
     }
 }
