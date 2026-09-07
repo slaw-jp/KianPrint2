@@ -71,6 +71,14 @@ public struct KianLineBreaker {
     public init() {}
 
     public func breakLines(_ attributed: NSAttributedString, width: CGFloat) -> [KianMeasuredLine] {
+        breakLines(attributed, firstLineWidth: width, subsequentLineWidth: width)
+    }
+
+    public func breakLines(
+        _ attributed: NSAttributedString,
+        firstLineWidth: CGFloat,
+        subsequentLineWidth: CGFloat
+    ) -> [KianMeasuredLine] {
         guard attributed.length > 0 else { return [measure(attributed)] }
         var results: [KianMeasuredLine] = []
         let fullString = attributed.string as NSString
@@ -83,6 +91,7 @@ public struct KianLineBreaker {
             let clusters = composedRanges(in: fullString, range: paragraph)
             var start = 0
             while start < clusters.count {
+                let width = results.isEmpty ? firstLineWidth : subsequentLineWidth
                 var end = start + 1
                 var lastFitting = end
                 while end <= clusters.count {

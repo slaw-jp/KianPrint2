@@ -19,7 +19,7 @@ private final class LayoutBuilder {
     var cursorY: CGFloat
     var currentPageIndex = 0
     var contentBottom: CGFloat { settings.paperHeight - settings.bottomMargin }
-    var baseAdvance: CGFloat { settings.fontSize + settings.lineSpacing }
+    var baseAdvance: CGFloat { settings.lineAdvance }
 
     init(settings: KianSettings) {
         self.settings = settings
@@ -69,10 +69,13 @@ private final class LayoutBuilder {
         let leadingX = settings.leftMargin + CGFloat(paragraph.indentLevel) * unit
         let firstX = max(settings.leftMargin, leadingX - CGFloat(paragraph.firstLineOutdent) * unit)
         let attributed = KianTypography.attributedString(from: paragraph.inlines, settings: settings)
-        let firstWidth = settings.paperWidth - settings.rightMargin - firstX
-        let subsequentWidth = settings.paperWidth - settings.rightMargin - leadingX
-        // Break once at the narrower width for deterministic hanging indentation.
-        let lines = breaker.breakLines(attributed, width: min(firstWidth, subsequentWidth))
+        let firstWidth = settings.paragraphContentWidth - (firstX - settings.leftMargin)
+        let subsequentWidth = settings.paragraphContentWidth - (leadingX - settings.leftMargin)
+        let lines = breaker.breakLines(
+            attributed,
+            firstLineWidth: firstWidth,
+            subsequentLineWidth: subsequentWidth
+        )
         for (index, line) in lines.enumerated() {
             ensureSpace(baseAdvance)
             let baseX = index == 0 ? firstX : leadingX

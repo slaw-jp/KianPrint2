@@ -31,6 +31,8 @@ public enum KianTextAlignment: String, Sendable {
 
 public struct KianSettings: Sendable, Equatable {
     public static let pointsPerMillimeter = 72.0 / 25.4
+    public static let courtColumns = 37
+    public static let courtLinesPerPage = 26
 
     public var paperWidth: CGFloat = 210 * pointsPerMillimeter
     public var paperHeight: CGFloat = 297 * pointsPerMillimeter
@@ -50,6 +52,34 @@ public struct KianSettings: Sendable, Equatable {
 
     public var contentWidth: CGFloat { paperWidth - leftMargin - rightMargin }
     public var contentHeight: CGFloat { paperHeight - topMargin - bottomMargin }
+
+    /// The legacy Court Style values form a fixed 37-column by 26-line grid.
+    /// Customized typography or geometry falls back to measured free layout.
+    public var usesStandardCourtGrid: Bool {
+        kinsokuMode == "裁判所"
+            && approximatelyEqual(paperWidth, 210 * Self.pointsPerMillimeter)
+            && approximatelyEqual(paperHeight, 297 * Self.pointsPerMillimeter)
+            && approximatelyEqual(topMargin, 35 * Self.pointsPerMillimeter)
+            && approximatelyEqual(bottomMargin, 27 * Self.pointsPerMillimeter)
+            && approximatelyEqual(leftMargin, 30 * Self.pointsPerMillimeter)
+            && approximatelyEqual(rightMargin, 22 * Self.pointsPerMillimeter)
+            && approximatelyEqual(fontSize, 12)
+            && fontName == "Hiragino Mincho ProN W3"
+            && approximatelyEqual(lineSpacing, 13.62)
+            && approximatelyEqual(characterSpacing, 0)
+    }
+
+    public var paragraphContentWidth: CGFloat {
+        usesStandardCourtGrid ? CGFloat(Self.courtColumns) * fontSize : contentWidth
+    }
+
+    public var lineAdvance: CGFloat {
+        usesStandardCourtGrid ? contentHeight / CGFloat(Self.courtLinesPerPage) : fontSize + lineSpacing
+    }
+
+    private func approximatelyEqual(_ lhs: CGFloat, _ rhs: CGFloat) -> Bool {
+        abs(lhs - rhs) < 0.001
+    }
 }
 
 public struct KianInline: Sendable, Equatable {

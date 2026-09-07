@@ -52,6 +52,33 @@ final class TypographyTests: XCTestCase {
             return text.origin
         }
         XCTAssertEqual(textOrigins.count, 26)
-        XCTAssertEqual(textOrigins[1].y - textOrigins[0].y, document.settings.fontSize + document.settings.lineSpacing, accuracy: 0.001)
+        XCTAssertEqual(textOrigins[1].y - textOrigins[0].y, document.settings.lineAdvance, accuracy: 0.001)
+    }
+
+    func testStandardCourtGridFitsExactly37FullwidthCharacters() throws {
+        let document = try KianParser().parse(String(repeating: "あ", count: 74))
+        let layout = KianLayoutEngine().layout(document)
+        let lines = layout.pages[0].commands.compactMap { command -> String? in
+            guard case .text(let text) = command else { return nil }
+            return text.text.string
+        }
+
+        XCTAssertTrue(document.settings.usesStandardCourtGrid)
+        XCTAssertEqual(lines.map(\.count), [37, 37])
+    }
+
+    func testHangingIndentUsesWiderFirstLineLikeLegacyKianPrint() throws {
+        let prefix = String(repeating: "あ", count: 30)
+        let source = "第１　総論\n１　架空の事情\n　　\(prefix)令和２年１月"
+        let document = try KianParser().parse(source)
+        let layout = KianLayoutEngine().layout(document)
+        let lines = layout.pages[0].commands.compactMap { command -> String? in
+            guard case .text(let text) = command else { return nil }
+            return text.text.string
+        }
+
+        XCTAssertEqual(lines[2].count, 36)
+        XCTAssertTrue(lines[2].hasSuffix("令和２年"))
+        XCTAssertTrue(lines[3].hasPrefix("１月"))
     }
 }
