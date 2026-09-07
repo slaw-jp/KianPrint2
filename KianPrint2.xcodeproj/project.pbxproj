@@ -1,0 +1,242 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		100000000000000000000001 /* KianPrint2App.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000001 /* KianPrint2App.swift */; };
+		100000000000000000000002 /* DocumentController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000002 /* DocumentController.swift */; };
+		100000000000000000000003 /* FileMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000003 /* FileMonitor.swift */; };
+		100000000000000000000004 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000004 /* ContentView.swift */; };
+		100000000000000000000005 /* KianPrintCore in Frameworks */ = {isa = PBXBuildFile; productRef = A00000000000000000000002 /* KianPrintCore */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		200000000000000000000001 /* KianPrint2App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KianPrint2App.swift; sourceTree = "<group>"; };
+		200000000000000000000002 /* DocumentController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentController.swift; sourceTree = "<group>"; };
+		200000000000000000000003 /* FileMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileMonitor.swift; sourceTree = "<group>"; };
+		200000000000000000000004 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		200000000000000000000005 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		200000000000000000000006 /* KianPrint2.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = KianPrint2.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		300000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (100000000000000000000005 /* KianPrintCore in Frameworks */,);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		400000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				400000000000000000000002 /* App */,
+				400000000000000000000004 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		400000000000000000000002 /* App */ = {
+			isa = PBXGroup;
+			children = (400000000000000000000003 /* KianPrint2 */,);
+			path = App;
+			sourceTree = "<group>";
+		};
+		400000000000000000000003 /* KianPrint2 */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000001 /* KianPrint2App.swift */,
+				200000000000000000000002 /* DocumentController.swift */,
+				200000000000000000000003 /* FileMonitor.swift */,
+				200000000000000000000004 /* ContentView.swift */,
+				200000000000000000000005 /* Info.plist */,
+			);
+			path = KianPrint2;
+			sourceTree = "<group>";
+		};
+		400000000000000000000004 /* Products */ = {
+			isa = PBXGroup;
+			children = (200000000000000000000006 /* KianPrint2.app */,);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		500000000000000000000001 /* KianPrint2 */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 900000000000000000000002 /* Build configuration list for PBXNativeTarget "KianPrint2" */;
+			buildPhases = (
+				600000000000000000000001 /* Sources */,
+				300000000000000000000001 /* Frameworks */,
+				700000000000000000000001 /* Resources */,
+			);
+			buildRules = ();
+			dependencies = ();
+			name = KianPrint2;
+			packageProductDependencies = (A00000000000000000000002 /* KianPrintCore */,);
+			productName = KianPrint2;
+			productReference = 200000000000000000000006 /* KianPrint2.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		800000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2660;
+				LastUpgradeCheck = 2660;
+				TargetAttributes = {500000000000000000000001 = {CreatedOnToolsVersion = 26.6;};};
+			};
+			buildConfigurationList = 900000000000000000000001 /* Build configuration list for PBXProject "KianPrint2" */;
+			developmentRegion = ja;
+			hasScannedForEncodings = 0;
+			knownRegions = (ja, en, Base,);
+			mainGroup = 400000000000000000000001;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (A00000000000000000000001 /* XCLocalSwiftPackageReference "KianPrintCore" */,);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 400000000000000000000004 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (500000000000000000000001 /* KianPrint2 */,);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		700000000000000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = ();
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		600000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				100000000000000000000001 /* KianPrint2App.swift in Sources */,
+				100000000000000000000002 /* DocumentController.swift in Sources */,
+				100000000000000000000003 /* FileMonitor.swift in Sources */,
+				100000000000000000000004 /* ContentView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		B00000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		B00000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+			};
+			name = Release;
+		};
+		B00000000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = App/KianPrint2/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = jp.slaw.KianPrint2;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		B00000000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = App/KianPrint2/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = jp.slaw.KianPrint2;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		900000000000000000000001 /* Build configuration list for PBXProject "KianPrint2" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (B00000000000000000000001 /* Debug */, B00000000000000000000002 /* Release */,);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		900000000000000000000002 /* Build configuration list for PBXNativeTarget "KianPrint2" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (B00000000000000000000003 /* Debug */, B00000000000000000000004 /* Release */,);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		A00000000000000000000001 /* XCLocalSwiftPackageReference "KianPrintCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/KianPrintCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A00000000000000000000002 /* KianPrintCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A00000000000000000000001 /* XCLocalSwiftPackageReference "KianPrintCore" */;
+			productName = KianPrintCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 800000000000000000000001 /* Project object */;
+}

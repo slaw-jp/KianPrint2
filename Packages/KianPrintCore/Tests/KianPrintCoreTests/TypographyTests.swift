@@ -1,0 +1,43 @@
+import XCTest
+@testable import KianPrintCore
+
+final class TypographyTests: XCTestCase {
+    private let settings = KianSettings()
+
+    func testLineStartProhibition() {
+        let text = KianTypography.attributedString(from: [KianInline(text: "これは架空の文章です、次の文章です。")], settings: settings)
+        let lines = KianLineBreaker().breakLines(text, width: 70)
+        for line in lines.dropFirst() {
+            XCTAssertFalse(KianLineBreaker.prohibitedAtLineStart.contains(String(line.attributedText.string.prefix(1))))
+        }
+    }
+
+    func testLineEndProhibition() {
+        let text = KianTypography.attributedString(from: [KianInline(text: "架空の文章（括弧の中身）です。")], settings: settings)
+        let lines = KianLineBreaker().breakLines(text, width: 64)
+        for line in lines.dropLast() {
+            XCTAssertFalse(KianLineBreaker.prohibitedAtLineEnd.contains(String(line.attributedText.string.suffix(1))))
+        }
+    }
+
+    func testDoesNotSplitGraphemeCluster() {
+        let source = "あいう👨‍👩‍👧‍👦えお"
+        let text = KianTypography.attributedString(from: [KianInline(text: source)], settings: settings)
+        let lines = KianLineBreaker().breakLines(text, width: 25)
+        XCTAssertEqual(lines.map { $0.attributedText.string }.joined(), source)
+    }
+
+    func testAvoidsBreakingLatinWordWhenPossible() {
+        let text = KianTypography.attributedString(from: [KianInline(text: "日本語 KianPrint2 application 文書")], settings: settings)
+        let lines = KianLineBreaker().breakLines(text, width: 100)
+        XCTAssertFalse(lines.contains { $0.attributedText.string == "KianPri" })
+    }
+
+    func testDeterministicPaginationAndExplicitBreak() throws {
+        let document = try KianParser().parse("第一頁\n@改ページ\n第二頁")
+        let first = KianLayoutEngine().layout(document)
+        let second = KianLayoutEngine().layout(document)
+        XCTAssertEqual(first.pages.count, 2)
+        XCTAssertEqual(first.pages.map(\.commands.count), second.pages.map(\.commands.count))
+    }
+}
