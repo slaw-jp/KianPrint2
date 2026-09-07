@@ -53,7 +53,8 @@ private final class LayoutBuilder {
             )
             let measured = breaker.breakLines(attributed, width: settings.contentWidth)[0]
             let x = settings.leftMargin + (settings.contentWidth - measured.width) / 2
-            let y = settings.paperHeight - settings.bottomMargin * 0.3 - measured.ascent
+            let textHeight = measured.ascent + measured.descent
+            let y = settings.paperHeight - settings.bottomMargin / 2 - textHeight / 2
             pages[index].commands.append(.text(KianPlacedText(
                 text: measured.attributedText,
                 origin: CGPoint(x: x, y: y),

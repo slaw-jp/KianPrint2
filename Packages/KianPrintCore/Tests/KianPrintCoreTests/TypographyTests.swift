@@ -67,6 +67,22 @@ final class TypographyTests: XCTestCase {
         XCTAssertEqual(lines.map(\.count), [37, 37])
     }
 
+    func testCourtFrameUsesLegacySlackForHalfwidthText() throws {
+        let firstLine = String(repeating: "あ", count: 34)
+        let secondLine = String(repeating: "い", count: 32)
+        let source = "第１　架空の項目\n　　\(firstLine)\(secondLine)II.A)価格"
+        let document = try KianParser().parse(source)
+        let layout = KianLayoutEngine().layout(document)
+        let lines = layout.pages[0].commands.compactMap { command -> String? in
+            guard case .text(let text) = command else { return nil }
+            return text.text.string
+        }
+
+        XCTAssertEqual(lines[1], "　　\(firstLine)")
+        XCTAssertEqual(lines[2], "\(secondLine)II.A)価")
+        XCTAssertEqual(lines[3], "格")
+    }
+
     func testHangingIndentUsesWiderFirstLineLikeLegacyKianPrint() throws {
         let prefix = String(repeating: "あ", count: 30)
         let source = "第１　総論\n１　架空の事情\n　　\(prefix)令和２年１月"
@@ -80,5 +96,18 @@ final class TypographyTests: XCTestCase {
         XCTAssertEqual(lines[2].count, 36)
         XCTAssertTrue(lines[2].hasSuffix("令和２年"))
         XCTAssertTrue(lines[3].hasPrefix("１月"))
+    }
+
+    func testPageNumberIsCenteredInBottomMargin() throws {
+        let document = try KianParser().parse("第一頁\n@改ページ\n第二頁")
+        let layout = KianLayoutEngine().layout(document)
+        guard case .text(let pageNumber) = layout.pages[0].commands.last else {
+            return XCTFail("ページ番号がありません。")
+        }
+
+        let textCenterY = pageNumber.origin.y + (pageNumber.ascent + pageNumber.descent) / 2
+        let bottomMarginCenterY = document.settings.paperHeight - document.settings.bottomMargin / 2
+        XCTAssertEqual(pageNumber.text.string, "1")
+        XCTAssertEqual(textCenterY, bottomMarginCenterY, accuracy: 0.001)
     }
 }

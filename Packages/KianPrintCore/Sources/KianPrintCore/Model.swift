@@ -70,7 +70,10 @@ public struct KianSettings: Sendable, Equatable {
     }
 
     public var paragraphContentWidth: CGFloat {
-        usesStandardCourtGrid ? CGFloat(Self.courtColumns) * fontSize : contentWidth
+        guard usesStandardCourtGrid else { return contentWidth }
+        // Keep the legacy margin-derived slack used by halfwidth glyphs and
+        // punctuation, while ensuring that a 38th fullwidth glyph never fits.
+        return min(contentWidth, CGFloat(Self.courtColumns + 1) * fontSize - 0.001)
     }
 
     public var lineAdvance: CGFloat {

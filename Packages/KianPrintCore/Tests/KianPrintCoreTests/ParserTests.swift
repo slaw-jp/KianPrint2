@@ -25,6 +25,23 @@ final class ParserTests: XCTestCase {
         XCTAssertTrue(document.blocks.contains { if case .pageBreak = $0 { return true }; return false })
     }
 
+    func testCustomCharacterAndLineSpacingLeaveCourtGrid() throws {
+        let source = """
+        ---
+        文字サイズ: 12pt
+        字間: 0.2pt
+        行間: 6pt
+        ---
+        架空の本文
+        """
+        let document = try KianParser().parse(source)
+
+        XCTAssertEqual(document.settings.characterSpacing, 0.2, accuracy: 0.001)
+        XCTAssertEqual(document.settings.lineSpacing, 6, accuracy: 0.001)
+        XCTAssertEqual(document.settings.lineAdvance, 18, accuracy: 0.001)
+        XCTAssertFalse(document.settings.usesStandardCourtGrid)
+    }
+
     func testInvalidSettingReportsLineNumber() {
         XCTAssertThrowsError(try KianParser().parse("---\n上余白: 大きめ\n---\n本文")) { error in
             XCTAssertEqual((error as? KianIssue)?.line, 2)
