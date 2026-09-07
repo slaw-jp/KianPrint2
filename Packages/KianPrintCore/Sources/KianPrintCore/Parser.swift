@@ -213,17 +213,17 @@ public struct KianParser {
                 throw KianIssue(line: lineNumber, message: "β版で使用できる用紙はA4だけです。")
             }
         case "font": settings.fontName = value
-        case "font size": settings.fontSize = try points(value, line: lineNumber)
+        case "font-size": settings.fontSize = try points(value, line: lineNumber)
         case "top": settings.topMargin = try millimeters(value, line: lineNumber)
         case "bottom": settings.bottomMargin = try millimeters(value, line: lineNumber)
         case "left": settings.leftMargin = try millimeters(value, line: lineNumber)
         case "right": settings.rightMargin = try millimeters(value, line: lineNumber)
         case "spacing": settings.lineSpacing = try points(value, line: lineNumber)
         case "kern": settings.characterSpacing = try points(value, line: lineNumber, unitOptional: true)
-        case "page number":
+        case "page-number":
             if value.lowercased() == "on" { settings.showsPageNumbers = true }
             else if value.lowercased() == "off" { settings.showsPageNumbers = false }
-            else { throw KianIssue(line: lineNumber, message: "page number は on または off で指定してください。") }
+            else { throw KianIssue(line: lineNumber, message: "page-number は on または off で指定してください。") }
         case "kinsoku":
             guard value.lowercased() == "court" else {
                 throw KianIssue(line: lineNumber, message: "kinsoku は court で指定してください。")
@@ -390,7 +390,7 @@ public struct KianParser {
             headers: headers,
             alignments: alignments,
             rows: rows,
-            columnWidthsInCharacters: forcedColumnWidths,
+            columnWidthsInFontUnits: forcedColumnWidths,
             firstRowAlignment: forcedFirstRowAlignment,
             sourceLine: start + 1
         ), index)

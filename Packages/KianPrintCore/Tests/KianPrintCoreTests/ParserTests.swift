@@ -5,9 +5,9 @@ final class ParserTests: XCTestCase {
     func testEnglishFrontMatterAndDirectives() throws {
         let source = """
         ---
-        font size: 13pt
+        font-size: 13pt
         top: 30mm
-        page number: off
+        page-number: off
         ---
         # 訴状
         @tab(12) {
@@ -40,9 +40,9 @@ final class ParserTests: XCTestCase {
     func testCourtPresetOverridesEveryOtherSettingRegardlessOfOrder() throws {
         let source = """
         ---
-        font size: 99pt
+        font-size: 99pt
         top: この値も無視される
-        page number: off
+        page-number: off
         preset: court
         spacing: 1pt
         ---
@@ -63,14 +63,14 @@ final class ParserTests: XCTestCase {
         ---
         paper: A4
         font: Hiragino Mincho ProN W3
-        font size: 12pt
+        font-size: 12pt
         top: 35mm
         bottom: 27mm
         left: 30mm
         right: 22mm
         kern: 0pt
         spacing: 13.62pt
-        page number: on
+        page-number: on
         kinsoku: court
         ---
         架空の本文
@@ -85,7 +85,7 @@ final class ParserTests: XCTestCase {
     func testCustomCharacterAndLineSpacingLeaveCourtGrid() throws {
         let source = """
         ---
-        font size: 12pt
+        font-size: 12pt
         kern: 0.2pt
         spacing: 6pt
         ---
@@ -129,7 +129,7 @@ final class ParserTests: XCTestCase {
         }
         """)
         guard case .table(let borderedTable) = bordered.blocks[0] else { return XCTFail() }
-        XCTAssertEqual(borderedTable.columnWidthsInCharacters ?? [], [1, 2, 3])
+        XCTAssertEqual(borderedTable.columnWidthsInFontUnits ?? [], [1, 2, 3])
         XCTAssertEqual(borderedTable.firstRowAlignment, .center)
 
         let rightHeader = try KianParser().parse("""

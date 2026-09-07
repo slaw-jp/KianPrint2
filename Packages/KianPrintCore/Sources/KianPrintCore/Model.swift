@@ -175,8 +175,8 @@ public struct KianTable: Sendable, Equatable {
     public var headers: [KianTableCell]
     public var alignments: [KianColumnAlignment]
     public var rows: [KianTableRow]
-    /// Absolute column widths, measured in 12pt fullwidth-character units.
-    public var columnWidthsInCharacters: [CGFloat]?
+    /// Absolute column widths measured in document-font-size units.
+    public var columnWidthsInFontUnits: [CGFloat]?
     public var firstRowAlignment: KianColumnAlignment?
     public var sourceLine: Int
 
@@ -184,14 +184,14 @@ public struct KianTable: Sendable, Equatable {
         headers: [KianTableCell],
         alignments: [KianColumnAlignment],
         rows: [KianTableRow],
-        columnWidthsInCharacters: [CGFloat]? = nil,
+        columnWidthsInFontUnits: [CGFloat]? = nil,
         firstRowAlignment: KianColumnAlignment? = nil,
         sourceLine: Int
     ) {
         self.headers = headers
         self.alignments = alignments
         self.rows = rows
-        self.columnWidthsInCharacters = columnWidthsInCharacters
+        self.columnWidthsInFontUnits = columnWidthsInFontUnits
         self.firstRowAlignment = firstRowAlignment
         self.sourceLine = sourceLine
     }

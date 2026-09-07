@@ -60,7 +60,7 @@ final class TypographyTests: XCTestCase {
         let body = (1...25).map { "本文\($0)" }.joined(separator: "\n")
         let source = """
         ---
-        font size: 12pt
+        font-size: 12pt
         top: 35mm
         bottom: 27mm
         left: 30mm
@@ -138,7 +138,7 @@ final class TypographyTests: XCTestCase {
     func testHeadingSizesUseTheExactLegacyRatios() throws {
         let document = try KianParser().parse("""
         ---
-        font size: 15pt
+        font-size: 15pt
         ---
         # 大見出し
         ## 中見出し
@@ -212,6 +212,29 @@ final class TypographyTests: XCTestCase {
             )
         }
         XCTAssertLessThan(verticalXs.last!, document.settings.leftMargin + document.settings.contentWidth)
+    }
+
+    func testTableColumnUnitScalesWithDocumentFontSize() throws {
+        let document = try KianParser().parse("""
+        ---
+        font-size: 18pt
+        ---
+        @table(2,3) {
+        | 一 | 二 |
+        | --- | --- |
+        }
+        """)
+        let layout = KianLayoutEngine().layout(document)
+        let top = document.settings.topMargin
+        let verticalXs = layout.pages[0].commands.compactMap { command -> CGFloat? in
+            guard case .line(let from, let to, _) = command,
+                  abs(from.x - to.x) < 0.001,
+                  abs(from.y - top) < 0.001 else { return nil }
+            return from.x
+        }
+        XCTAssertEqual(verticalXs.count, 3)
+        XCTAssertEqual(verticalXs[1] - verticalXs[0], 36, accuracy: 0.001)
+        XCTAssertEqual(verticalXs[2] - verticalXs[1], 54, accuracy: 0.001)
     }
 
     func testFirstRowCanBeCenteredWhileBodyUsesColumnAlignment() throws {
@@ -315,7 +338,7 @@ final class TypographyTests: XCTestCase {
     func testTabUnitScalesWithDocumentFontSize() throws {
         let document = try KianParser().parse("""
         ---
-        font size: 18pt
+        font-size: 18pt
         ---
         @tab(2,3) {
         一\t二\t三

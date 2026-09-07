@@ -211,8 +211,8 @@ private final class LayoutBuilder {
     private func columnWidths(for table: KianTable) -> [CGFloat] {
         let count = table.headers.count
         guard count > 0 else { return [] }
-        if let widths = table.columnWidthsInCharacters, widths.count == count {
-            return widths.map { $0 * 12 }
+        if let widths = table.columnWidthsInFontUnits, widths.count == count {
+            return widths.map { $0 * settings.fontSize }
         }
 
         var preferred = Array(repeating: CGFloat(36), count: count)
