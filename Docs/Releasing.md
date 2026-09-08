@@ -1,6 +1,8 @@
 # KianPrint2 リリース手順
 
-KianPrint2だけを対象に、Privateリポジトリでリリース候補を検証してからOSSとして公開する。ワークスペース共通の `~/Development/publish-releases.sh` は全プロジェクトのZIP置換・バックアップ・pushを一括実行するため、KianPrint2のGitHub Releaseには使用しない。
+KianPrint2だけを対象に、リリース候補を検証してGitHub Releaseとして公開する。`AGENTS.md` とワークスペース共通の `RELEASING.md` を併読する。「この変更をリリースして」で、この個別手順の全工程を対象製品だけに実施する。共通の `~/Development/publish-releases.sh "KianPrint2"` は対象限定のDrive配布用であり、GitHub Releaseの代わりにはならない。
+
+以下のPrivateからPublicへの変更は初回OSS公開時の手順。既にPublicのリポジトリでは可視性を変更せず、同じ検証・ビルド・タグ・Release作成／公開を行う。通常のリリース指示にはリポジトリの可視性変更を含めない。
 
 ## 原則
 
