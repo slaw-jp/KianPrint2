@@ -13,3 +13,12 @@
 不足する公開先などの必須情報だけを確認する。
 
 必ず `Docs/Releasing.md` と `README.md` を読む。β版・Universal Binary・GitHub Releaseの個別手順を使う。共通のDrive用publisherだけで正式公開完了としない。既にPublicなら初回Public化の工程は不要。リポジトリの可視性変更は通常のリリース指示に含めない。
+
+## インストール先（ユーザー指定）
+
+「動作確認できる状態にして」「この変更をリリースして」のどちらでも、
+このMacでのインストール先は **`/Users/hiroki/Applications/KianPrint2.app`** に固定する。
+`/Applications/KianPrint2.app` へインストール・更新しない。
+ビルド出力 `build/Release/KianPrint2.app` は従来どおり。
+設定・保存データは `/Users/hiroki/Library` 内の既存の場所を継続使用し、
+bundle IDやサンドボックスコンテナを変更しない。詳細は共通 `RELEASING.md` のアプリ節に従う。

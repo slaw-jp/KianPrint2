@@ -4,6 +4,15 @@ KianPrint2だけを対象に、リリース候補を検証してGitHub Release�
 
 以下のPrivateからPublicへの変更は初回OSS公開時の手順。既にPublicのリポジトリでは可視性を変更せず、同じ検証・ビルド・タグ・Release作成／公開を行う。通常のリリース指示にはリポジトリの可視性変更を含めない。
 
+## このMacへのローカルインストール
+
+「動作確認できる状態にして」「この変更をリリースして」のどちらでも、
+`build/Release/KianPrint2.app` を **`/Users/hiroki/Applications/KianPrint2.app`** へインストールする。
+既存版もこの場所で更新し、`/Applications/KianPrint2.app` には戻さない。
+設定・保存データは `/Users/hiroki/Library` にある元の場所を継続使用する。
+ステージング・署名検証・入替え方法は共通 `RELEASING.md` のアプリ節に従う。
+配布ZIPの出力先とGitHub Releaseの公開先は従来どおり。
+
 ## 原則
 
 - 異なるバイナリには必ず異なるバージョンまたはbuild numberを付ける。
