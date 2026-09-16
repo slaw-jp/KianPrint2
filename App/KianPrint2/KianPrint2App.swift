@@ -26,6 +26,11 @@ struct KianPrint2App: App {
                 Button("mi.appで編集") { documentController.editInMi() }
                     .disabled(documentController.fileURL == nil)
             }
+            CommandGroup(replacing: .printItem) {
+                Button("プリント…") { documentController.printDocument() }
+                    .keyboardShortcut("p")
+                    .disabled(documentController.fileURL == nil)
+            }
         }
     }
 }

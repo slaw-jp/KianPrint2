@@ -10,7 +10,7 @@ struct ContentView: View {
             toolbar
             if let message = controller.message {
                 HStack(spacing: 8) {
-                    Image(systemName: message.hasPrefix("PDFを書き出しました") ? "checkmark.circle" : "exclamationmark.triangle")
+                    Image(systemName: isSuccessMessage(message) ? "checkmark.circle" : "exclamationmark.triangle")
                     Text(message).lineLimit(2)
                     Spacer()
                 }
@@ -28,6 +28,8 @@ struct ContentView: View {
     private var toolbar: some View {
         HStack(spacing: 10) {
             Button("開く", systemImage: "folder") { controller.showOpenPanel() }
+            Button("プリント", systemImage: "printer") { controller.printDocument() }
+                .disabled(controller.fileURL == nil)
             Button("PDFを書き出す", systemImage: "square.and.arrow.up") { controller.showExportPanel() }
                 .disabled(controller.fileURL == nil)
             Button("再読み込み", systemImage: "arrow.clockwise") { controller.reload() }
@@ -44,6 +46,10 @@ struct ContentView: View {
                 .frame(width: 46, alignment: .trailing)
         }
         .padding(12)
+    }
+
+    private func isSuccessMessage(_ message: String) -> Bool {
+        message.hasPrefix("PDFを書き出しました") || message.hasPrefix("印刷を開始しました")
     }
 
     private var pagePreview: some View {

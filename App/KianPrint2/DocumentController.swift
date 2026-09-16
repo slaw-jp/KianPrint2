@@ -81,6 +81,35 @@ final class DocumentController: ObservableObject {
         }
     }
 
+    func printDocument() {
+        guard let fileURL else { return }
+
+        let printInfo = NSPrintInfo.shared.copy() as! NSPrintInfo
+        printInfo.paperSize = layout.pages.first?.size ?? CGSize(
+            width: layout.settings.paperWidth,
+            height: layout.settings.paperHeight
+        )
+        printInfo.orientation = .portrait
+        printInfo.topMargin = 0
+        printInfo.bottomMargin = 0
+        printInfo.leftMargin = 0
+        printInfo.rightMargin = 0
+        printInfo.horizontalPagination = .clip
+        printInfo.verticalPagination = .clip
+        printInfo.isHorizontallyCentered = false
+        printInfo.isVerticallyCentered = false
+        printInfo.scalingFactor = 1
+
+        let printView = KianPrintView(layout: layout)
+        let operation = NSPrintOperation(view: printView, printInfo: printInfo)
+        operation.jobTitle = fileURL.deletingPathExtension().lastPathComponent
+        operation.showsPrintPanel = true
+        operation.showsProgressPanel = true
+        if operation.run() {
+            message = "印刷を開始しました。"
+        }
+    }
+
     func editInMi() {
         guard let fileURL else { return }
         let candidates = [
@@ -108,4 +137,54 @@ final class DocumentController: ObservableObject {
     }
 
     deinit { securityScopedURL?.stopAccessingSecurityScopedResource() }
+}
+
+private final class KianPrintView: NSView {
+    private let pages: [KianPage]
+    private let pageSize: CGSize
+    private let renderer = KianRenderer()
+
+    init(layout: KianLayout) {
+        pages = layout.pages
+        pageSize = layout.pages.first?.size ?? CGSize(
+            width: layout.settings.paperWidth,
+            height: layout.settings.paperHeight
+        )
+        super.init(frame: CGRect(
+            origin: .zero,
+            size: CGSize(width: pageSize.width, height: pageSize.height * CGFloat(pages.count))
+        ))
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override var isFlipped: Bool { true }
+
+    override func knowsPageRange(_ range: NSRangePointer) -> Bool {
+        range.pointee = NSRange(location: 1, length: pages.count)
+        return true
+    }
+
+    override func rectForPage(_ page: Int) -> NSRect {
+        guard pages.indices.contains(page - 1) else { return .zero }
+        return pageRect(at: page - 1)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+
+        for (index, page) in pages.enumerated() {
+            let pageRect = pageRect(at: index)
+            guard dirtyRect.intersects(pageRect) else { continue }
+            context.saveGState()
+            context.translateBy(x: pageRect.minX, y: pageRect.minY)
+            renderer.draw(page: page, in: context)
+            context.restoreGState()
+        }
+    }
+
+    private func pageRect(at index: Int) -> CGRect {
+        CGRect(x: 0, y: CGFloat(index) * pageSize.height, width: pageSize.width, height: pageSize.height)
+    }
 }

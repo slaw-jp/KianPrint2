@@ -37,7 +37,7 @@ preset: court
 @tab(3,2,10,14)left	left	left	right
 	１	訴状副本	１通
 	２	甲号証写し	各２通
-	３	証拠説明書	２通ø
+	３	証拠説明書	２通
 	４	資格証明書	１通
 	５	訴訟委任状	１通@end
 @page

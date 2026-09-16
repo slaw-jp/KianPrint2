@@ -51,7 +51,7 @@ git diff --check
 git status --short
 git diff --check
 git add <確認済みのファイル>
-git commit -m "Release 0.3.0-beta.1"
+git commit -m "Release 0.4.0-beta.1"
 git status --short
 ```
 
@@ -83,8 +83,8 @@ codesign --verify --deep --strict --verbose=2 build/Release/KianPrint2.app
 ```sh
 ditto -c -k --sequesterRsrc --keepParent \
   build/Release/KianPrint2.app \
-  build/Release/KianPrint2-0.3.0-beta.1-macOS-universal.zip
-shasum -a 256 build/Release/KianPrint2-0.3.0-beta.1-macOS-universal.zip
+  build/Release/KianPrint2-0.4.0-beta.1-macOS-universal.zip
+shasum -a 256 build/Release/KianPrint2-0.4.0-beta.1-macOS-universal.zip
 ```
 
 表示されたSHA-256はGitHub Releaseの本文へ記載する。
@@ -92,9 +92,9 @@ shasum -a 256 build/Release/KianPrint2-0.3.0-beta.1-macOS-universal.zip
 ## 6. tagとPrivateへのpush
 
 ```sh
-git tag -a v0.3.0-beta.1 -m "KianPrint2 0.3.0-beta.1"
+git tag -a v0.4.0-beta.1 -m "KianPrint2 0.4.0-beta.1"
 git push origin main
-git push origin v0.3.0-beta.1
+git push origin v0.4.0-beta.1
 ```
 
 既存tagを確認してから作成し、公開済みtagを付け替えない。
@@ -104,9 +104,9 @@ git push origin v0.3.0-beta.1
 Privateの状態で、tagを指定したpre-releaseの下書きを作り、ZIPを添付する。
 
 ```sh
-gh release create v0.3.0-beta.1 \
-  build/Release/KianPrint2-0.3.0-beta.1-macOS-universal.zip \
-  --title "KianPrint2 0.3.0-beta.1" \
+gh release create v0.4.0-beta.1 \
+  build/Release/KianPrint2-0.4.0-beta.1-macOS-universal.zip \
+  --title "KianPrint2 0.4.0-beta.1" \
   --prerelease --draft --notes-file <release-notes-file>
 ```
 
