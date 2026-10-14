@@ -62,10 +62,10 @@ public enum KianTypography {
 
 public struct KianLineBreaker {
     public static let prohibitedAtLineStart = Set(
-        "、。，．・：；？！‼⁇⁈⁉)]｝〕〉》」』】〙〗〟’”｠»ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶー〜ゝゞヽヾ々〻ㇰㇱㇲㇳㇴㇵㇶㇷㇸㇹㇺㇻㇼㇽㇾㇿ".map(String.init)
+        "、。，．・：；？！‼⁇⁈⁉)]}）］｝〕〉》」』｣】〙〗〟’”｠»ぁぃぅぇぉっゃゅょゎゕゖァィゥェォッャュョヮヵヶー〜ゝゞヽヾ々〻ㇰㇱㇲㇳㇴㇵㇶㇷㇸㇹㇺㇻㇼㇽㇾㇿ".map(String.init)
     )
     public static let prohibitedAtLineEnd = Set(
-        "([｛〔〈《「『【〘〖〝‘“｟«".map(String.init)
+        "([{（［｛〔〈《「『｢【〘〖〝‘“｟«".map(String.init)
     )
 
     public init() {}
@@ -105,11 +105,6 @@ public struct KianLineBreaker {
                 var breakIndex = min(lastFitting, clusters.count)
                 if breakIndex <= start { breakIndex = start + 1 }
 
-                while breakIndex > start + 1,
-                      Self.prohibitedAtLineEnd.contains(clusterString(fullString, clusters[breakIndex - 1])) {
-                    breakIndex -= 1
-                }
-
                 if breakIndex < clusters.count,
                    isASCIIWord(clusterString(fullString, clusters[breakIndex - 1])),
                    isASCIIWord(clusterString(fullString, clusters[breakIndex])) {
@@ -121,11 +116,39 @@ public struct KianLineBreaker {
                     if wordStart > start { breakIndex = wordStart }
                 }
 
-                // Word's overflowPunct behavior is approximated by hanging prohibited
-                // punctuation instead of permitting it at the beginning of the next line.
-                while breakIndex < clusters.count,
-                      Self.prohibitedAtLineStart.contains(clusterString(fullString, clusters[breakIndex])) {
-                    breakIndex += 1
+                // Keep the court-style hanging behavior, but bound its overflow
+                // to the measured width of one prohibited cluster. Longer runs move
+                // with their preceding character instead of protruding indefinitely.
+                var hangingIndex = breakIndex
+                while hangingIndex < clusters.count,
+                      Self.prohibitedAtLineStart.contains(clusterString(fullString, clusters[hangingIndex])) {
+                    hangingIndex += 1
+                }
+                let hangingAllowance = hangingIndex > breakIndex
+                    ? KianTypography.width(of: attributed.attributedSubstring(from: clusters[breakIndex]))
+                    : 0
+                let hangingWidth = KianTypography.width(
+                    of: attributed.attributedSubstring(from: union(clusters[start..<hangingIndex]))
+                )
+                if isLegalBoundary(hangingIndex, in: fullString, clusters: clusters),
+                   hangingWidth <= width + max(0, hangingAllowance) {
+                    breakIndex = hangingIndex
+                } else {
+                    // Recheck BOTH sides after moving a Latin word or a bracket.
+                    // A single earlier pass can leave an opening bracket at line end.
+                    while breakIndex > start,
+                          !isLegalBoundary(breakIndex, in: fullString, clusters: clusters) {
+                        breakIndex -= 1
+                    }
+                    if breakIndex == start {
+                        // An indivisible group wider than the frame still has to
+                        // make progress. Keep the smallest legal group together.
+                        breakIndex = start + 1
+                        while breakIndex < clusters.count,
+                              !isLegalBoundary(breakIndex, in: fullString, clusters: clusters) {
+                            breakIndex += 1
+                        }
+                    }
                 }
 
                 let lineRange = union(clusters[start..<breakIndex])
@@ -134,6 +157,13 @@ public struct KianLineBreaker {
             }
         }
         return results
+    }
+
+    private func isLegalBoundary(_ index: Int, in string: NSString, clusters: [NSRange]) -> Bool {
+        // The paragraph end is an explicit boundary, not an automatic wrap.
+        guard index < clusters.count else { return true }
+        return !Self.prohibitedAtLineEnd.contains(clusterString(string, clusters[index - 1]))
+            && !Self.prohibitedAtLineStart.contains(clusterString(string, clusters[index]))
     }
 
     private func measure(_ attributed: NSAttributedString) -> KianMeasuredLine {

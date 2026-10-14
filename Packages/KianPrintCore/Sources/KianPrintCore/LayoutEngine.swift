@@ -299,6 +299,13 @@ private final class LayoutBuilder {
         )
         combined.append(lines[lines.count - 1].attributedText)
 
+        // Avoiding a one-character last line is secondary to kinsoku. These
+        // substrings become separate automatic lines, not explicit paragraphs.
+        guard !KianLineBreaker.prohibitedAtLineEnd.contains(String(shortened.string.suffix(1))),
+              !KianLineBreaker.prohibitedAtLineStart.contains(String(combined.string.prefix(1))) else {
+            return lines
+        }
+
         let shortenedLines = breaker.breakLines(shortened, width: width)
         let combinedLines = breaker.breakLines(combined, width: width)
         guard shortenedLines.count == 1, combinedLines.count == 1 else { return lines }
